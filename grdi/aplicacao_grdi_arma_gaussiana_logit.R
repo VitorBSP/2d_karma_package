@@ -208,7 +208,7 @@
   
   ############################# LINK ############################# 
   
-  link = 'identity'
+  link = 'logit'
   linktemp <- substitute(link)
   if (!is.character(linktemp)){
     linktemp <- deparse(linktemp)
