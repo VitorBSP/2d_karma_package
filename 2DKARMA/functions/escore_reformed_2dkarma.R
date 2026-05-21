@@ -2,6 +2,7 @@ escore <- function(z, ynew, ar, ma, n, k, p1, q1, a = 0, b = 1){
   
   p = max(ar) # AR order
   q = max(ma) # MA order
+  w <- max(p, q)
   
   if(p > 0 && q > 0){
     alpha <- z[1]
@@ -50,6 +51,8 @@ escore <- function(z, ynew, ar, ma, n, k, p1, q1, a = 0, b = 1){
   mu.eta <-  link$mu.eta
   diflink <- link$diflink
   
+  y = ynew
+  ynew = linkfun(ynew)
   eta = error = matrix(0, ncol=k,nrow=n)
   dimarray = 1
   
@@ -57,30 +60,29 @@ escore <- function(z, ynew, ar, ma, n, k, p1, q1, a = 0, b = 1){
   deta.dphi = array(0, c(n,k,p1))
   deta.dtheta = array(0, c(n,k,q1))
   
-  for (i in (m + 1):n) {
-    for (j in (m + 1):k) {
-      xx = as.vector(t(ynew[(i - ar):i, (j - ar):j]))
+  for (i in (w + 1):n) {
+    for (j in (w + 1):k) {
+      xx = as.vector(t(ynew[(i - p):i, (j - p):j]))
+      yy = as.vector(t(error[(i - q):i, (j - q):j]))
       y_new1 = as.matrix(xx[(length(xx) - 1):1])
-      
-      yy = as.vector(t(error[(i - ma):i, (j - ma):j]))
       error_new = as.matrix(yy[(length(yy) - 1):1])
       
       eta[i, j] = alpha + phi %*% y_new1 + theta %*% error_new
       error[i, j] = ynew[i, j] - eta[i, j]
       
       # deta.dalpha
-      de.da = as.vector(deta.dalpha[(i - ma):i, (j - ma):j])
+      de.da = as.vector(t(deta.dalpha[(i - q):i, (j - q):j]))
       deta.dalpha_anterior = as.matrix(de.da[(length(de.da) - 1):1])
       deta.dalpha[i, j] = 1 - theta %*% deta.dalpha_anterior
       
       # deta.dphi
-      for (ii in 0:ar) {
-        for (jj in 0:ar) {
+      for (ii in 0:p) {
+        for (jj in 0:p) {
           if (ii == 0 & jj == 0) {
             dimarray = 1
             next
           }
-          de.dp = as.vector(t(deta.dphi[(i - ma):i, (j - ma):j, dimarray]))
+          de.dp = as.vector(t(deta.dphi[(i - q):i, (j - q):j, dimarray]))
           de.dp_anterior = as.matrix(de.dp[(length(de.dp) - 1):1])
           deta.dphi[i, j, dimarray] = ynew[i - ii, j - jj] - theta %*% de.dp_anterior
           dimarray = dimarray + 1
@@ -94,7 +96,7 @@ escore <- function(z, ynew, ar, ma, n, k, p1, q1, a = 0, b = 1){
             dimarray = 1
             next
           }
-          de.dt = as.vector(t(deta.dtheta[(i - ma):i, (j - ma):j, dimarray]))
+          de.dt = as.vector(t(deta.dtheta[(i - q):i, (j - q):j, dimarray]))
           de.dt_anterior = as.matrix(de.dt[(length(de.dt) - 1):1])
           deta.dtheta[i, j, dimarray] = error[i - ii, j - jj] - theta %*% de.dt_anterior
           dimarray = dimarray + 1
@@ -109,7 +111,7 @@ escore <- function(z, ynew, ar, ma, n, k, p1, q1, a = 0, b = 1){
   
   # 1/g'(mu)
   #mu = as.vector(exp(t(eta[(m+1):n,(m+1):k])))
-  mu_eta = as.vector(t(mu.eta(eta[(m+1):n, (m+1):k])))
+  mu_eta = as.vector(t(mu.eta(eta[(w + 1):n, (w + 1):k])))
   
   # Aqui será o mu.eta
   
@@ -117,8 +119,8 @@ escore <- function(z, ynew, ar, ma, n, k, p1, q1, a = 0, b = 1){
   #y1 = as.vector(t(y[(m+1):n,(m+1):k]))
   #dmu = as.vector(((pi * (y1^2)) / (2 * (mu^3)) - (2) / (mu)))
   
-  y1 = as.vector(t(ynew[(m+1):n,(m+1):k]))
-  mu = as.vector(linkinv(t(eta[(m+1):n,(m+1):k])))
+  mu <- as.vector(t(linkinv(eta[(w + 1):n, (w + 1):k])))
+  y1 <- as.vector(t(y[(w + 1):n, (w + 1):k]))
   
   delta <- log(0.5)/log(1-mu^prec)
   c1 <- mu^(prec-1)/((1-mu^prec)*log(1-mu^prec))
@@ -139,18 +141,24 @@ escore <- function(z, ynew, ar, ma, n, k, p1, q1, a = 0, b = 1){
   #- deta.dphi
   #- deta.theta
   
-  a = as.vector(deta.dalpha[(m+1):n,(m+1):k])
+  a = as.vector(deta.dalpha[(w + 1):n, (w + 1):k])
   
   if(p > 0 && q > 0){
-    rP = do.call(cbind,  lapply(1:p1,function(i){ as.vector(t(deta.dphi[(m+1):n,(m+1):k,i])) }))
-    rT = do.call(cbind,  lapply(1:q1,function(i){ as.vector(t(deta.dtheta[(m+1):n,(m+1):k,i])) }))
+    rP <- do.call(
+      cbind,
+      lapply(1:p1, function(i) as.vector(t(deta.dphi[(w + 1):n, (w + 1):k, i])))
+    )
+    rT <- do.call(
+      cbind,
+      lapply(1:q1, function(i) as.vector(t(deta.dtheta[(w + 1):n, (w + 1):k, i])))
+    )
     deta.dgamma = cbind(a, rP, rT)
   }else{
     if(p > 0){
-      rP = do.call(cbind,  lapply(1:p1,function(i){ as.vector(t(deta.dphi[(m+1):n,(m+1):k,i])) }))
+      rP = do.call(cbind,  lapply(1:p1,function(i){ as.vector(t(deta.dphi[(w+1):n,(w+1):k,i])) }))
       deta.dgamma = cbind(a, rP)
     }else{
-      rT = do.call(cbind,  lapply(1:q1,function(i){ as.vector(t(deta.dtheta[(m+1):n,(m+1):k,i])) }))
+      rT = do.call(cbind,  lapply(1:q1,function(i){ as.vector(t(deta.dtheta[(w+1):n,(w+1):k,i])) }))
       deta.dgamma = cbind(a, rT)
     }
   }

@@ -28,7 +28,7 @@ mse <- function(verdadeiro, predito){
 }
 
 mape <- function(verdadeiro, predito){
-  metrica = mean(abs(verdadeiro - predito / verdadeiro)) * 100
+  metrica = mean(abs((verdadeiro - predito) / verdadeiro)) * 100
   return(metrica)
 }
 
@@ -58,77 +58,96 @@ parameter_estimation <- function(reg, ynew, ar, ma, n, k, p1, q1, a = 0, b = 1){
   return(opt$par)
 }
 
-arma_mle_inference <- function(reg, ynew, AR, MA, n, k, p1, q1, a = 0, b = 1, 
-                               chol = FALSE, simetrizacao = FALSE ) {
-  opt = optim(reg, loglik, 
-              escore,
-              method = "BFGS", 
-              hessian = TRUE,
-              control = list(fnscale = -1), ynew = ynew, ar = AR, ma = MA, n = n,
-              k = k, p1 = p1, q1=q1)
+arma_mle_inference <- function(
+    reg,
+    ynew,
+    AR,
+    MA,
+    n,
+    k,
+    p1,
+    q1,
+    a = 0,
+    b = 1,
+    use_cholesky = FALSE,
+    symmetrize = TRUE
+) {
+  opt <- optim(
+    par = reg,
+    fn = loglik,
+    gr = escore,
+    method = "BFGS",
+    hessian = TRUE,
+    control = list(fnscale = -1),
+    ynew = ynew,
+    ar = AR,
+    ma = MA,
+    n = n,
+    k = k,
+    p1 = p1,
+    q1 = q1,
+    a = a,
+    b = b
+  )
   
   theta_hat <- opt$par
-  if (is.null(names(theta_hat))) names(theta_hat) <- paste0("par", seq_along(theta_hat))
   
-  H <- opt$hessian
-  # Informação observada: -ℓ''(θ̂)
-  
-  if (simetrizacao == FALSE){
-    HESSIAN = -H
-  }
-  else {
-    HESSIAN <- -0.5 * (H + t(H)) 
+  if (is.null(names(theta_hat))) {
+    names(theta_hat) <- paste0("par", seq_along(theta_hat))
   }
   
-  if ((chol == FALSE)){
-    cov_theta <- tryCatch(
-      solve(HESSIAN),
-      error = function(e) {
-        warning("Hessian mal-condicionada.")
-        matrix(NA_real_, length(theta_hat), length(theta_hat))
+  observed_information <- -opt$hessian
+  
+  if (symmetrize) {
+    observed_information <- 0.5 * (observed_information + t(observed_information))
+  }
+  
+  covariance_matrix <- tryCatch(
+    {
+      if (use_cholesky) {
+        chol2inv(base::chol(observed_information))
+      } else {
+        solve(observed_information)
       }
-    )
-  } else {
-    cov_theta <- tryCatch(
-      chol2inv(chol(HESSIAN)),     # Var(θ̂) ≈ A^{-1}
-      error = function(e) {
-        lam <- 1e-8 * max(abs(diag(A)), na.rm = TRUE)
-        A_r <- A + diag(lam, nrow(A))
-        tryCatch(
-          chol2inv(chol(A_r)),
-          error = function(e2) {
-            warning("Hessian ainda mal-condicionada.")
-            if (requireNamespace("MASS", quietly = TRUE)) MASS::ginv(A_r) else matrix(NA_real_, nrow(A), ncol(A))
-          }
-        )
-      }
-    )
-  } 
+    },
+    error = function(error_condition) {
+      eigen_values <- eigen(observed_information, symmetric = TRUE, only.values = TRUE)$values
+      ridge_value <- max(1e-8, -min(eigen_values) + 1e-8)
+      regularized_information <- observed_information +
+        diag(ridge_value, nrow(observed_information))
+      
+      tryCatch(
+        solve(regularized_information),
+        error = function(second_error_condition) {
+          warning("Não foi possível obter uma matriz de covariância confiável.")
+          matrix(NA_real_, nrow(observed_information), ncol(observed_information))
+        }
+      )
+    }
+  )
   
-  
-  
-  se  <- sqrt(diag(cov_theta))
-  z   <- theta_hat / se
-  p   <- 2 * pnorm(abs(z), lower.tail = FALSE)
+  standard_error <- sqrt(diag(covariance_matrix))
+  z_value <- theta_hat / standard_error
+  p_value <- 2 * pnorm(abs(z_value), lower.tail = FALSE)
   
   infer_table <- data.frame(
     estimate = theta_hat,
-    std_error = se,
-    z_value = z,
-    p_value = p,
+    std_error = standard_error,
+    z_value = z_value,
+    p_value = p_value,
     row.names = names(theta_hat),
     check.names = FALSE
   )
   
-  return(list(
-    coef        = theta_hat,
-    vcov        = cov_theta,
-    table       = infer_table,
+  list(
+    coef = theta_hat,
+    vcov = covariance_matrix,
+    table = infer_table,
     convergence = opt$convergence,
-    message     = opt$message,
-    counts      = opt$counts,
-    value       = opt$value  # valor do objetivo no ótimo (aqui, -loglik)
-  ))
+    message = opt$message,
+    counts = opt$counts,
+    value = opt$value
+  )
 }
 
 
@@ -254,7 +273,7 @@ colnames(y_true_selected) = 1:dim(y_true_selected)[2]
 
 y_train = y_true_selected[51:100, 51:100]
 y_anomaly = y_true_selected
-y_anomaly[5:20, 15:30] = 0.999999
+y_anomaly[5:20, 15:30] = 0.3
 n = dim(y_train)[1]
 k = dim(y_train)[2]
 #ynew = linkfun(y)
@@ -279,12 +298,12 @@ q=1
 if(p == 0) {
   AR <- c(0)
 } else {
-  AR <- seq(p)
+  AR <- 0:p
 }
 if(q == 0) {
   MA <- c(0)
 } else {
-  MA <- seq(q)
+  MA <- 0:q
 }
 
 if(p == 0 && q == 0){
@@ -305,7 +324,7 @@ set.seed(15)
 estim = try(parameter_estimation(reg, y_train, AR, MA, 
                                       n, k, p1, q1))
 estim
-estim_chol <- arma_mle_inference(reg, y_train, AR, MA, n, k, p1, q1, chol = TRUE)
+estim_chol <- arma_mle_inference(reg, y_train, AR, MA, n, k, p1, q1, use_cholesky = TRUE)
 estim_chol$table
 
 
@@ -333,99 +352,143 @@ m = max(ar,ma)
 
 ############################# PREDIÇÃO ############################# 
 
-n_prev = 50
-k_prev = 50
+n_prev <- 50
+k_prev <- 50
+epsilon <- 1e-8
 
-y_col = y_anomaly[1:(2*m), ]
-y_row = rbind(y_col, y_anomaly)[, 1:(2*m)]
-y_new = rbind(y_col, y_anomaly)
-y_new = cbind(y_row, y_new)
-y_new = preencher_com_media(y_new)
-y_withma = matrix(NA, ncol=dim(y_train)[2] + k_prev, nrow=dim(y_train)[1] + n_prev)
-ynew = rbind(y_col, y_withma)
-ynew = cbind(y_row, ynew)
-ynew = preencher_com_media(ynew)
-ynew1 = c()
+ar_order <- max(ar)
+ma_order <- max(ma)
+full_ar_count <- (ar_order + 1)^2 - 1
+full_ma_count <- (ma_order + 1)^2 - 1
 
-eta = error = mu = matrix(0, ncol=(dim(y_train)[2] + k_prev+2*m),
-                          nrow=(dim(y_train)[1] + n_prev+2*m))
-
-# p1 = max(ar)
-# p2 = max(ma)
-for (i in (m+1):(n+2*m+n_prev))
-{
-  for (j in (m+1):(k+2*m + k_prev))
-  {
-    theta_ = theta
-    phi_ = phi
-    if(p1 == 0){
-      phi_ = 0
-      y_new1 = 0
-    }else{
-      if(length(phi) == p1){
-        xx = as.vector(t(y_new[(i-ar):i,(j-ar):j]))
-        y_new1 = as.matrix(xx[(length(xx)-1):1])
-      } else {
-        
-        xx = as.vector(t(y_new[(i-ar):i,(j-ar):j]))
-        y_new1 = as.matrix(xx[(length(xx)-1):1])
-        
-        full_ar = 1:ar
-        ar_insignificant = full_ar[!full_ar %in% p]
-        ar_index = matrix(TRUE, nrow(y_new1))
-        
-        for(not_ar in ar_insignificant){
-          first_discarted_index = sum(1:(not_ar-1))*2 + (not_ar-1) + 1
-          last_discarted_index = sum(1:not_ar)*2 + (not_ar)
-          ar_index[(first_discarted_index): last_discarted_index] = FALSE
-        }
-        
-        y_new1 = as.matrix(y_new1[ar_index])
-      }
-    }
-    
-    
-    if(q1 == 0){
-      theta_ = 0
-      error_new = 0
-    }else{
-      if(length(theta) == q1){
-        
-        yy = as.vector(t(error[(i-ma):i,(j-ma):j]))
-        error_new = as.matrix(yy[(length(yy)-1):1])
-        
-        if(length(theta) == 0){
-          theta_ = 0
-        }
-      } else{
-        yy = as.vector(t(error[(i-ma):i,(j-ma):j]))
-        error_new = as.matrix(yy[(length(yy)-1):1])
-        
-        full_ma = 1:ma
-        ma_insignificant = full_ma[!full_ma %in% 1]
-        ma_index = matrix(TRUE, nrow(error_new))
-        
-        
-        for(not_ma in ma_insignificant){
-          first_discarted_index = sum(1:(not_ma-1))*2 + (not_ma-1) + 1
-          last_discarted_index = sum(1:not_ma)*2 + (not_ma)
-          ma_index[(first_discarted_index): last_discarted_index] = FALSE
-        }
-        
-        error_new = as.matrix(error_new[ma_index])
-      }
-    }
-    
-    eta[i,j]  = alpha + phi_%*%y_new1 + theta_%*%error_new
-    error[i,j] = y_new[i,j]-eta[i,j]
-    ynew[i,j] = linkinv(eta[i,j])
-  }
-  
+selected_ar_orders <- if (exists("selected_ar_orders", inherits = FALSE)) {
+  selected_ar_orders
+} else if (ar_order > 0) {
+  seq_len(ar_order)
+} else {
+  integer(0)
 }
+
+selected_ma_orders <- if (exists("selected_ma_orders", inherits = FALSE)) {
+  selected_ma_orders
+} else if (ma_order > 0) {
+  seq_len(ma_order)
+} else {
+  integer(0)
+}
+
+y_col <- y_anomaly[1:(2 * m), , drop = FALSE]
+y_row <- rbind(y_col, y_anomaly)[, 1:(2 * m), drop = FALSE]
+
+y_new <- rbind(y_col, y_anomaly)
+y_new <- cbind(y_row, y_new)
+y_new <- preencher_com_media(y_new)
+
+y_withma <- matrix(
+  NA_real_,
+  ncol = ncol(y_train) + k_prev,
+  nrow = nrow(y_train) + n_prev
+)
+
+ynew <- rbind(y_col, y_withma)
+ynew <- cbind(y_row, ynew)
+ynew <- preencher_com_media(ynew)
+
+y_new <- pmin(pmax(y_new, epsilon), 1 - epsilon)
+ynew <- pmin(pmax(ynew, epsilon), 1 - epsilon)
+
+observed_rows <- nrow(y_new)
+observed_cols <- ncol(y_new)
+
+
+ynew[1:observed_rows, 1:observed_cols] <- y_new
+
+eta <- error <- matrix(
+  0,
+  nrow = nrow(ynew),
+  ncol = ncol(ynew)
+)
+
+
+y_state <- linkfun(ynew)
+y_new1 <- c()
+
+for (i in (m + 1):(n + 2 * m + n_prev)) {
+  for (j in (m + 1):(k + 2 * m + k_prev)) {
+    theta_ <- theta
+    phi_ <- phi
+    
+    if (ar_order == 0 || length(phi) == 0) {
+      phi_ <- 0
+      y_new1 <- 0
+    } else {
+      xx <- as.vector(t(y_state[(i - ar_order):i, (j - ar_order):j, drop = FALSE]))
+      y_new1 <- as.matrix(xx[(length(xx) - 1):1])
+      
+      if (length(phi) != full_ar_count) {
+        full_ar <- seq_len(ar_order)
+        ar_insignificant <- full_ar[!full_ar %in% selected_ar_orders]
+        ar_index <- matrix(TRUE, nrow(y_new1))
+        
+        for (not_ar in ar_insignificant) {
+          first_discarted_index <- sum(1:(not_ar - 1)) * 2 + (not_ar - 1) + 1
+          last_discarted_index <- sum(1:not_ar) * 2 + not_ar
+          ar_index[first_discarted_index:last_discarted_index] <- FALSE
+        }
+        
+        y_new1 <- as.matrix(y_new1[ar_index])
+      }
+    }
+    
+    if (ma_order == 0 || length(theta) == 0) {
+      theta_ <- 0
+      error_new <- 0
+    } else {
+      yy <- as.vector(t(error[(i - ma_order):i, (j - ma_order):j, drop = FALSE]))
+      error_new <- as.matrix(yy[(length(yy) - 1):1])
+      
+      if (length(theta) != full_ma_count) {
+        full_ma <- seq_len(ma_order)
+        ma_insignificant <- full_ma[!full_ma %in% selected_ma_orders]
+        ma_index <- matrix(TRUE, nrow(error_new))
+        
+        for (not_ma in ma_insignificant) {
+          first_discarted_index <- sum(1:(not_ma - 1)) * 2 + (not_ma - 1) + 1
+          last_discarted_index <- sum(1:not_ma) * 2 + not_ma
+          ma_index[first_discarted_index:last_discarted_index] <- FALSE
+        }
+        
+        error_new <- as.matrix(error_new[ma_index])
+      }
+    }
+    
+    eta[i, j] <- alpha + phi_ %*% y_new1 + theta_ %*% error_new
+    ynew[i, j] <- linkinv(eta[i, j])
+    
+    if ((is.na(ynew[i,j])) | (is.infinite(ynew[i,j]))){
+      print("i: ", "j: ", j)
+    } 
+    
+    inside_observed_region <- i <= observed_rows && j <= observed_cols
+    
+    if (inside_observed_region) {
+      error[i, j] <- y_state[i, j] - eta[i, j]
+    } else {
+      y_state[i, j] <- eta[i, j]
+      error[i, j] <- 0
+    }
+  }
+}
+
 
 ############################# RESULTADOS ############################# 
 
-y_prev_result = ynew[(2*m+1):(n+n_prev+2*m), (2*m+1):(k+k_prev+2*m)]
+y_prev_result <- ynew[
+  (2 * m + 1):nrow(ynew),
+  (2 * m + 1):ncol(ynew),
+  drop = FALSE
+]
+
 
 #y_anomaly_removing_na = preencher_com_media(y_anomaly)
 
@@ -444,6 +507,7 @@ residuo_quantilico = qnorm(pkuma(y_anomaly,
                                  prec))
 
 residuo_quantilico[is.infinite(residuo_quantilico)] <- max(as.vector(residuo_quantilico)[is.finite(as.vector(residuo_quantilico))])
+residuo_quantilico[is.nan(residuo_quantilico)] <- min(as.vector(residuo_quantilico)[is.nan(as.vector(residuo_quantilico))])
 
 w1<-5
 h1<-5

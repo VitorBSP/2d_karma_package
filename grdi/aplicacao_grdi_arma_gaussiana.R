@@ -25,7 +25,7 @@
   }
   
   mape <- function(verdadeiro, predito){
-    metrica = mean(abs(verdadeiro - predito / verdadeiro)) * 100
+    metrica = mean(abs((verdadeiro - predito) / verdadeiro)) * 100
     return(metrica)
   }
   
@@ -91,18 +91,19 @@
       cov_theta <- tryCatch(
         chol2inv(chol(HESSIAN)),     # Var(θ̂) ≈ A^{-1}
         error = function(e) {
-          lam <- 1e-8 * max(abs(diag(A)), na.rm = TRUE)
-          A_r <- A + diag(lam, nrow(A))
+          lam <- 1e-8 * max(abs(diag(HESSIAN)), na.rm = TRUE)
+          HESSIAN_r  <- HESSIAN + diag(lam, nrow(HESSIAN))
           tryCatch(
-            chol2inv(chol(A_r)),
+            chol2inv(chol(HESSIAN_r)),
             error = function(e2) {
               warning("Hessian ainda mal-condicionada.")
-              if (requireNamespace("MASS", quietly = TRUE)) MASS::ginv(A_r) else matrix(NA_real_, nrow(A), ncol(A))
+              if (requireNamespace("MASS", quietly = TRUE)) MASS::ginv(HESSIAN_r)
+              else matrix(NA_real_, nrow(HESSIAN), ncol(HESSIAN))
             }
           )
         }
       )
-    } 
+    }  
     
     
     

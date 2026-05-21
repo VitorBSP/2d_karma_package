@@ -18,16 +18,6 @@ preencher_com_media <- function(matriz) {
   return(matriz_preenchida)
 }
 
-parameter_estimation_arma <- function(reg, ynew, AR, MA, n, k, p1, q1, a = 0, b = 1){
-  opt = optim(reg, loglik_gaussiana, 
-              method = "BFGS", 
-              hessian = FALSE,
-              control = list(fnscale = -1), 
-              ynew = ynew, AR = AR, MA = MA, n = n, k = k, 
-              p1 = p1, q1 = q1, a = a, b = b)
-  return(opt$par)
-}
-
 
 mse <- function(verdadeiro, predito){
   metrica = mean((verdadeiro - predito)^2)
@@ -35,7 +25,7 @@ mse <- function(verdadeiro, predito){
 }
 
 mape <- function(verdadeiro, predito){
-  metrica = mean(abs(verdadeiro - predito / verdadeiro)) * 100
+  metrica = mean(abs((verdadeiro - predito) / verdadeiro)) * 100
   return(metrica)
 }
 
@@ -55,79 +45,100 @@ rmsle <- function(verdadeiro, predito){
   return(metrica)
 }
 
-arma_mle_inference <- function(reg, ynew, AR, MA, n, k, p1, q1, a = 0, b = 1, 
-                               chol = FALSE, simetrizacao = FALSE ) {
+
+parameter_estimation_arma <- function(reg, ynew, AR, MA, n, k, p1, q1, a = 0, b = 1){
+  opt = optim(reg, loglik_gaussiana, 
+              method = "BFGS", 
+              hessian = FALSE,
+              control = list(fnscale = -1), 
+              ynew = ynew, AR = AR, MA = MA, n = n, k = k, 
+              p1 = p1, q1 = q1, a = a, b = b)
+  return(opt$par)
+}
+
+arma_mle_inference <- function(
+    reg,
+    ynew,
+    AR,
+    MA,
+    n,
+    k,
+    p1,
+    q1,
+    a = 0,
+    b = 1,
+    use_cholesky = FALSE,
+    symmetrize = TRUE
+) {
   opt <- optim(
-    par     = reg,
-    fn      = loglik_gaussiana,
-    method  = "BFGS",
-    hessian = TRUE,                      # <- pede Hessiana numérica no ponto ótimo
-    control = list(fnscale = -1),        # <- maximiza loglik (minimizando -loglik)
-    ynew = ynew, AR = AR, MA = MA, n = n, k = k, p1 = p1, q1 = q1, a = a, b = b
-  )
+    par = reg,
+    fn = loglik_gaussiana,
+    method = "BFGS",
+    hessian = TRUE,
+    control = list(fnscale = -1),
+    ynew = ynew,
+    AR = AR, MA = MA, n = n, k = k, 
+    p1 = p1, q1 = q1, a = a, b = b)
+
   
   theta_hat <- opt$par
-  if (is.null(names(theta_hat))) names(theta_hat) <- paste0("par", seq_along(theta_hat))
   
-  H <- opt$hessian
-  # Informação observada: -ℓ''(θ̂)
-  
-  if (simetrizacao == FALSE){
-    HESSIAN = -H
-  }
-  else {
-    HESSIAN <- -0.5 * (H + t(H)) 
+  if (is.null(names(theta_hat))) {
+    names(theta_hat) <- paste0("par", seq_along(theta_hat))
   }
   
-  if ((chol == FALSE)){
-    cov_theta <- tryCatch(
-      solve(HESSIAN),
-      error = function(e) {
-        warning("Hessian mal-condicionada.")
-        matrix(NA_real_, length(theta_hat), length(theta_hat))
+  observed_information <- -opt$hessian
+  
+  if (symmetrize) {
+    observed_information <- 0.5 * (observed_information + t(observed_information))
+  }
+  
+  covariance_matrix <- tryCatch(
+    {
+      if (use_cholesky) {
+        chol2inv(base::chol(observed_information))
+      } else {
+        solve(observed_information)
       }
-    )
-  } else {
-    cov_theta <- tryCatch(
-      chol2inv(chol(HESSIAN)),     # Var(θ̂) ≈ A^{-1}
-      error = function(e) {
-        lam <- 1e-8 * max(abs(diag(A)), na.rm = TRUE)
-        A_r <- A + diag(lam, nrow(A))
-        tryCatch(
-          chol2inv(chol(A_r)),
-          error = function(e2) {
-            warning("Hessian ainda mal-condicionada.")
-            if (requireNamespace("MASS", quietly = TRUE)) MASS::ginv(A_r) else matrix(NA_real_, nrow(A), ncol(A))
-          }
-        )
-      }
-    )
-  } 
+    },
+    error = function(error_condition) {
+      eigen_values <- eigen(observed_information, symmetric = TRUE, only.values = TRUE)$values
+      ridge_value <- max(1e-8, -min(eigen_values) + 1e-8)
+      regularized_information <- observed_information +
+        diag(ridge_value, nrow(observed_information))
+      
+      tryCatch(
+        solve(regularized_information),
+        error = function(second_error_condition) {
+          warning("Não foi possível obter uma matriz de covariância confiável.")
+          matrix(NA_real_, nrow(observed_information), ncol(observed_information))
+        }
+      )
+    }
+  )
   
-  
-  
-  se  <- sqrt(diag(cov_theta))
-  z   <- theta_hat / se
-  p   <- 2 * pnorm(abs(z), lower.tail = FALSE)
+  standard_error <- sqrt(diag(covariance_matrix))
+  z_value <- theta_hat / standard_error
+  p_value <- 2 * pnorm(abs(z_value), lower.tail = FALSE)
   
   infer_table <- data.frame(
     estimate = theta_hat,
-    std_error = se,
-    z_value = z,
-    p_value = p,
+    std_error = standard_error,
+    z_value = z_value,
+    p_value = p_value,
     row.names = names(theta_hat),
     check.names = FALSE
   )
   
-  return(list(
-    coef        = theta_hat,
-    vcov        = cov_theta,
-    table       = infer_table,
+  list(
+    coef = theta_hat,
+    vcov = covariance_matrix,
+    table = infer_table,
     convergence = opt$convergence,
-    message     = opt$message,
-    counts      = opt$counts,
-    value       = opt$value  # valor do objetivo no ótimo (aqui, -loglik)
-  ))
+    message = opt$message,
+    counts = opt$counts,
+    value = opt$value
+  )
 }
 
 ############################# GRAFICOS ############################# 
@@ -252,7 +263,7 @@ colnames(y_true_selected) = 1:dim(y_true_selected)[2]
 
 y_train = y_true_selected[51:100, 51:100]
 y_anomaly = y_true_selected
-y_anomaly[5:20, 15:30] = 0.999999
+y_anomaly[5:20, 15:30] = 0.3
 n = dim(y_train)[1]
 k = dim(y_train)[2]
 #ynew = linkfun(y)
@@ -277,12 +288,12 @@ q=1
 if(p == 0) {
   AR <- c(0)
 } else {
-  AR <- seq(p)
+  AR <- 0:p
 }
 if(q == 0) {
   MA <- c(0)
 } else {
-  MA <- seq(q)
+  MA <- 0:q
 }
 
 if(p == 0 && q == 0){
@@ -298,7 +309,7 @@ set.seed(15)
 estim = try(parameter_estimation_arma(reg, y_train, AR, MA, 
                                       n, k, p1, q1))
 estim
-estim_chol <- arma_mle_inference(reg, y_train, AR, MA, n, k, p1, q1, chol = TRUE)
+estim_chol <- arma_mle_inference(reg, y_train, AR, MA, n, k, p1, q1, use_cholesky = TRUE)
 estim_chol$table
 
 
@@ -441,6 +452,9 @@ residuo_quantilico[is.infinite(residuo_quantilico)] <- max(as.vector(residuo_qua
 w1<-5
 h1<-5
 
+# residuo_quantilico = (y_anomaly - y_prev_result) / sigma_hat
+# sigma_hat <- estim[p1 + q1 + 2]
+
 graph_residuo_padronizado <- melt(aperm(residuo_padronizado, c(2, 1)))
 def_graph(graph_residuo_padronizado, 0, 0) +
   theme(legend.position="none")
@@ -466,8 +480,6 @@ mse(y_train, estimated_ndvi[51:100, 51:100])
 mape(y_train, estimated_ndvi[51:100, 51:100])
 r_2(y_train, estimated_ndvi[51:100, 51:100])
 rmsle(y_train, estimated_ndvi[51:100, 51:100])
-
-
 ############################# RESÍDUOS ############################# 
 residuo_threshold<- ifelse(residuo_padronizado < -3 | residuo_padronizado > 3, 1, 0)
 melt_threshold <- melt(aperm(residuo_threshold[nrow(residuo_threshold):1,], c(2, 1)))
