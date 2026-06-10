@@ -141,7 +141,9 @@ escore <- function(z, ynew, ar, ma, n, k, p1, q1, a = 0, b = 1){
   #- deta.dphi
   #- deta.theta
   
-  a = as.vector(deta.dalpha[(w + 1):n, (w + 1):k])
+  # QUAL O CORRETO:
+  #a = as.vector(deta.dalpha[(w + 1):n, (w + 1):k])
+  a <- as.vector(t(deta.dalpha[(w + 1):n, (w + 1):k]))
   
   if(p > 0 && q > 0){
     rP <- do.call(
