@@ -80,9 +80,14 @@ result_tables <- list(
   ndvi_detection = list(file = file.path(ndvi_dir,
                                          "anomaly-detection.csv"),
                         keys = c("element", "model")),
+  # The selection table contains fits of up to 32 parameters (order 3, 3)
+  # whose flat likelihood makes the BFGS end point differ at about 2e-5
+  # relative across R versions and BLAS (seen between R 4.3.3 and 4.6.1);
+  # the text columns (convergence, significance, inference status), which
+  # decide the selection, are still compared exactly.
   ndvi_model_selection = list(file = file.path(ndvi_dir,
                                                "model-selection.csv"),
-                              keys = c("p", "q")),
+                              keys = c("p", "q"), rel_tol = 1e-3),
   monte_carlo = list(file = file.path(mc_dir, "paper", "summary.csv"),
                      keys = c("scenario", "size", "parameter"))
 )
@@ -112,7 +117,8 @@ if (as.logical(opts$update_snapshot)) {
 }
 
 # Compare two tables cell by cell on their numeric columns.
-compare_tables <- function(new, ref, keys, check, label) {
+compare_tables <- function(new, ref, keys, check, label,
+                           table_tol = rel_tol) {
   key_new <- do.call(paste, c(new[keys], sep = " | "))
   key_ref <- do.call(paste, c(ref[keys], sep = " | "))
   rows <- list()
@@ -128,7 +134,7 @@ compare_tables <- function(new, ref, keys, check, label) {
   for (col in intersect(numeric_cols, names(new))) {
     a <- ref[[col]][match(intersect(key_ref, key_new), key_ref)]
     b <- new[[col]][match(intersect(key_ref, key_new), key_new)]
-    tol <- rel_tol * pmax(abs(a), 1e-3)
+    tol <- table_tol * pmax(abs(a), 1e-3)
     both_na <- is.na(a) & is.na(b)
     ok <- both_na | (!is.na(a) & !is.na(b) & abs(a - b) <= tol)
     rows[[length(rows) + 1]] <- data.frame(
@@ -168,8 +174,10 @@ if ("regression" %in% checks) {
       next
     }
     ref <- utils::read.csv(ref_path, check.names = FALSE)
+    table_tol <- result_tables[[name]]$rel_tol
     report[[length(report) + 1]] <- compare_tables(
-      new, ref, result_tables[[name]]$keys, "regression", name)
+      new, ref, result_tables[[name]]$keys, "regression", name,
+      if (is.null(table_tol)) rel_tol else max(rel_tol, table_tol))
   }
 }
 
