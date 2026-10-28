@@ -114,7 +114,7 @@ with_local_seed <- function(seed, code) {
   }
   on.exit({
     if (had_seed) {
-      assign(".Random.seed", old_seed, envir = global)
+      assign(".Random.seed", old_seed, envir = global) # nolint
     } else if (exists(".Random.seed", envir = global, inherits = FALSE)) {
       rm(".Random.seed", envir = global)
     }
