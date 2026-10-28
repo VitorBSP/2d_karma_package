@@ -294,8 +294,12 @@ covariance_from_information <- function(info, rcond_tol = 1e-12) {
     }
   }
   if (!is.null(message)) {
-    warning(message, if (status == "unavailable")
-      " Standard errors are not available." else "", call. = FALSE)
+    suffix <- if (status == "unavailable") {
+      " Standard errors are not available."
+    } else {
+      ""
+    }
+    warning(message, suffix, call. = FALSE)
   }
   list(information = info, vcov = vc, status = status, message = message,
        rcond = rc)

@@ -24,7 +24,7 @@
 #' @export
 karma2d_lags <- function(order, prefix = "phi") {
   if (!is.numeric(order) || length(order) != 1L || is.na(order) ||
-      order < 0 || order != round(order)) {
+        order < 0 || order != round(order)) {
     stop("`order` must be a single non-negative integer.", call. = FALSE)
   }
   grid <- expand.grid(col_lag = seq_len(order + 1) - 1L,

@@ -2,6 +2,8 @@
 # extrapolation is accurate to about 1e-7 relative here; we use 1e-5
 # relative to the gradient norm to stay robust across platforms.
 
+# Helpers simulate_scenario() and scenario_parameters() are defined in
+# helper-karma2d.R.
 score_check <- function(s, par, size = 15, seed = 1) {
   y <- simulate_scenario(s, size, seed)
   analytic <- karma2d_score(y, par, s$order)

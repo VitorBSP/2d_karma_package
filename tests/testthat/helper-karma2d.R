@@ -24,10 +24,11 @@ numeric_pixel_information <- function(mu, shape) {
   delta <- log(0.5) / log1mu
   scores <- function(t) {
     r <- exp(-t / delta)
-    x <- -expm1(-t / delta) # y^shape
+    x <- -expm1(-t / delta) # equals y to the power shape
     log_x <- log1p(-r)
     log_y <- log_x / shape
-    ratio <- ifelse(r > 1e-12, log_x / r, -1 - r / 2) # log(x) / (1 - x)
+    # ratio of log(x) to one minus x, with its limit -1 at x = 1
+    ratio <- ifelse(r > 1e-12, log_x / r, -1 - r / 2)
     c_term <- mu^(shape - 1) / ((1 - mu^shape) * log1mu) * (1 - t)
     cbind(shape * c_term,
           1 / shape + log_y + c_term * mu * log(mu) -

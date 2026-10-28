@@ -128,7 +128,7 @@ kuma_log_survival <- function(z, m, shape) {
 #' @rdname kumaraswamy
 #' @export
 pkuma <- function(q, median, shape, lower = 0, upper = 1,
-                  lower.tail = TRUE, log.p = FALSE) {
+                  lower.tail = TRUE, log.p = FALSE) { # nolint
   q_in <- q
   a <- recycle_args(q, median, shape, lower, upper)
   lower <- a[[4]]
@@ -154,7 +154,7 @@ pkuma <- function(q, median, shape, lower = 0, upper = 1,
 #' @rdname kumaraswamy
 #' @export
 qkuma <- function(p, median, shape, lower = 0, upper = 1,
-                  lower.tail = TRUE, log.p = FALSE) {
+                  lower.tail = TRUE, log.p = FALSE) { # nolint
   p_in <- p
   a <- recycle_args(p, median, shape, lower, upper)
   p <- a[[1]]

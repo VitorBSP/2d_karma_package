@@ -39,7 +39,8 @@ residuals.karma2d_fit <- function(object, type = c("quantile", "response",
     link = {
       link_obj <- make_karma2d_link(object$link)
       sup <- object$support
-      unit <- function(v) (v - sup[["lower"]]) / (sup[["upper"]] - sup[["lower"]])
+      width <- sup[["upper"]] - sup[["lower"]]
+      unit <- function(v) (v - sup[["lower"]]) / width
       link_obj$linkfun(unit(object$data)) -
         link_obj$linkfun(unit(object$fitted_median))
     }

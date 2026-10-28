@@ -2,13 +2,12 @@
 # 2-D KARMA model. All functions here work on the unit scale (0, 1) and on
 # the original parametrization gamma = (alpha, phi, theta, shape).
 #
-# Notation (per pixel of the effective region):
-#   u      = mu^shape
-#   delta  = log(0.5) / log(1 - u)
-#   A      = shape * mu^(shape - 1) / ((1 - u) * log(1 - u))
-#          = d delta-part of the log-density / d mu, so that
-#            d l / d mu = A * (1 + delta * log(1 - y^shape))     (= shape * c)
-#   B      = (d delta / d shape) / delta = u * log(mu) / ((1 - u) * log(1 - u))
+# Notation (per pixel of the effective region): u is mu^shape, delta is
+# log(0.5) / log(1 - u), A is shape mu^(shape - 1) / ((1 - u) log(1 - u)),
+# so that the derivative of the log-density with respect to mu is
+# A (1 + delta log(1 - y^shape)), i.e. shape times c[n, m] of Appendix A,
+# and B is the derivative of log(delta) with respect to the shape,
+# u log(mu) / ((1 - u) log(1 - u)).
 # Under the model, E := -delta * log(1 - Y^shape) ~ Exp(1) and
 # X := Y^shape ~ Beta(1, delta); the expected information below follows from
 # these two facts. See docs/technical-audit.md, Section "Fisher information".
@@ -48,7 +47,7 @@ karma2d_quantities <- function(par, y, y_link, order, link_obj,
                                derivatives = FALSE) {
   parts <- split_parameters(par, order)
   if (!is.finite(parts$shape) || parts$shape <= 0 ||
-      any(!is.finite(c(parts$alpha, parts$ar, parts$ma)))) {
+        any(!is.finite(c(parts$alpha, parts$ar, parts$ma)))) {
     return(NULL)
   }
   rec <- karma2d_recursion(y_link, parts$alpha, parts$ar, parts$ma, order,
@@ -59,7 +58,7 @@ karma2d_quantities <- function(par, y, y_link, order, link_obj,
   mu <- link_obj$linkinv(eta)
   shape <- parts$shape
   if (any(!is.finite(eta)) || any(!is.finite(mu)) ||
-      any(mu <= 0 | mu >= 1)) {
+        any(mu <= 0 | mu >= 1)) {
     return(NULL)
   }
   u <- mu^shape
@@ -70,7 +69,7 @@ karma2d_quantities <- function(par, y, y_link, order, link_obj,
   }
   y_eff <- y[eff]
   log_y <- log(y_eff)
-  shape_log_y <- shape * log_y # log(y^shape)
+  shape_log_y <- shape * log_y
   list(
     parts = parts,
     eff = eff,
@@ -83,8 +82,9 @@ karma2d_quantities <- function(par, y, y_link, order, link_obj,
     u = u,
     delta = delta,
     log_y = log_y,
-    log1my = log1mexp(shape_log_y), # log(1 - y^shape)
-    yphi_ratio = exp(shape_log_y) / -expm1(shape_log_y), # y^s / (1 - y^s)
+    # log of one minus y^shape, and y^shape over one minus y^shape
+    log1my = log1mexp(shape_log_y),
+    yphi_ratio = exp(shape_log_y) / -expm1(shape_log_y),
     ratio_u = ratio_u_log1mu(u)
   )
 }

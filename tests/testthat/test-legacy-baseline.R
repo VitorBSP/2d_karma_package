@@ -27,15 +27,16 @@ for (case_name in names(baseline$cases)) {
                  cs$score_base, tolerance = 1e-10)
   })
 
-  test_that(paste("gamma blocks of the information reproduce legacy:",
-                  case_name), {
+  label <- paste("gamma blocks of the information reproduce legacy:",
+                 case_name)
+  test_that(label, {
     k <- karma2d_information(cs$y, cs$parameters, s$order)
     expect_equal(unname(k[, -np]), cs$fisher_legacy[, -np],
                  tolerance = 1e-10)
   })
 
-  test_that(paste("legacy shape-shape entry was the observed one:",
-                  case_name), {
+  label <- paste("legacy shape-shape entry was the observed one:", case_name)
+  test_that(label, {
     # Documents the audit finding: the legacy "Fisher" (shape, shape) entry
     # equals the observed information, not the expected one.
     o <- karma2d_information(cs$y, cs$parameters, s$order,

@@ -43,7 +43,7 @@ check_scalar_number <- function(x, name, positive = FALSE) {
 
 check_order <- function(order) {
   if (!is.numeric(order) || length(order) != 2L || anyNA(order) ||
-      any(order < 0) || any(order != round(order))) {
+        any(order < 0) || any(order != round(order))) {
     stop("`order` must be a vector c(p, q) of two non-negative integers.",
          call. = FALSE)
   }
@@ -90,7 +90,7 @@ supported_links <- c("logit", "probit", "cloglog", "cauchit")
 
 make_karma2d_link <- function(link) {
   if (!is.character(link) || length(link) != 1L ||
-      !link %in% supported_links) {
+        !link %in% supported_links) {
     stop(sprintf(
       "`link` must be one of %s.",
       paste0('"', supported_links, '"', collapse = ", ")

@@ -29,12 +29,12 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Vitor Bernardo Silveira Pereira \email{vitorpereira3115@gmail.com}
+\strong{Maintainer}: V<U+00ED>tor Bernardo Silveira Pereira \email{vitorpereira3115@gmail.com}
 
 Other contributors:
 \itemize{
   \item Bruna G. Palm (Co-author of the statistical methodology) [contributor]
-  \item Fabio M. Bayer (Co-author of the statistical methodology) [contributor]
+  \item F<U+00E1>bio M. Bayer (Co-author of the statistical methodology) [contributor]
 }
 
 }

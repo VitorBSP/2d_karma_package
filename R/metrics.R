@@ -23,12 +23,12 @@
 #' @export
 karma2d_metrics <- function(observed, predicted) {
   if (!is.numeric(observed) || !is.numeric(predicted) ||
-      length(observed) != length(predicted)) {
+        length(observed) != length(predicted)) {
     stop("`observed` and `predicted` must be numeric with the same length.",
          call. = FALSE)
   }
   if (!is.null(dim(observed)) && !is.null(dim(predicted)) &&
-      !identical(dim(observed), dim(predicted))) {
+        !identical(dim(observed), dim(predicted))) {
     stop("`observed` and `predicted` must have the same dimensions.",
          call. = FALSE)
   }

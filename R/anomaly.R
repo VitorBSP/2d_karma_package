@@ -24,7 +24,7 @@ NULL
 
 check_mask <- function(mask, name) {
   if (!is.matrix(mask) || anyNA(mask) ||
-      !(is.logical(mask) || all(mask %in% c(0, 1)))) {
+        !(is.logical(mask) || all(mask %in% c(0, 1)))) {
     stop(sprintf("`%s` must be a logical or 0/1 matrix without NA.", name),
          call. = FALSE)
   }

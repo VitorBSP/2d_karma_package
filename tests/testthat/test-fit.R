@@ -65,8 +65,8 @@ test_that("summary reports Wald statistics", {
 test_that("confint gives Wald intervals", {
   ci <- confint(fit_ar)
   se <- sqrt(diag(vcov(fit_ar)))
-  expect_equal(unname(ci[, 2] - coef(fit_ar)), unname(stats::qnorm(0.975) *
-                                                       se))
+  half_width <- unname(stats::qnorm(0.975) * se)
+  expect_equal(unname(ci[, 2] - coef(fit_ar)), half_width)
 })
 
 test_that("logLik carries df and nobs", {

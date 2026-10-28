@@ -11,7 +11,8 @@ WGS 84 longitude/latitude; pixel size about 0.00241 degrees).
 }
 \source{
 NASA LP DAAC, MODIS/Terra Vegetation Indices 16-Day L3 Global
-250 m SIN Grid (MOD13Q1), \url{https://modis.gsfc.nasa.gov/data/dataprod/mod13.php}.
+250 m SIN Grid (MOD13Q1),
+\url{https://modis.gsfc.nasa.gov/data/dataprod/mod13.php}.
 File \code{NDVI_2019_10.tif} of the original project repository (composite
 10 of 2019, consistent with the "May 2019" scene of the article). The
 exact product version and download date were not recorded in the
