@@ -12,3 +12,4 @@
 ^CITATION\.cff$
 ^renv$
 ^renv\.lock$
+^pkgdown-site$
