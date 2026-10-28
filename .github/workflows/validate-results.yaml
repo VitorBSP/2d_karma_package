@@ -1,0 +1,39 @@
+# Checks that the reproduction pipelines still give the results already
+# obtained (snapshot in analysis/reference/) and that the comparison with
+# the article only shows the documented divergences.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+name: validate-results
+
+permissions: read-all
+
+jobs:
+  validate-results:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::terra, local::.
+          needs: validation
+
+      - name: Validate results
+        run: Rscript analysis/validate_results.R --output=analysis/output/validation
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: analysis/output/validation/validation-report.csv
