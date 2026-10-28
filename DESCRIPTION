@@ -2,11 +2,11 @@ Package: karma2d
 Title: Two-Dimensional Kumaraswamy Autoregressive Moving Average Models
 Version: 0.1.0.9000
 Authors@R: c(
-    person("Vitor Bernardo Silveira", "Pereira", , "vitorpereira3115@gmail.com",
+    person("Vítor Bernardo Silveira", "Pereira", , "vitorpereira3115@gmail.com",
            role = c("aut", "cre")),
     person("Bruna G.", "Palm", role = "ctb",
            comment = "Co-author of the statistical methodology"),
-    person("Fabio M.", "Bayer", role = "ctb",
+    person("Fábio M.", "Bayer", role = "ctb",
            comment = "Co-author of the statistical methodology")
   )
 Description: Conditional maximum likelihood estimation, simulation,

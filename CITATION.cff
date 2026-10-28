@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it and the associated article."
+title: "karma2d: Two-Dimensional Kumaraswamy Autoregressive Moving Average Models"
+version: 0.1.0.9000
+type: software
+license: MIT
+repository-code: "https://github.com/VitorBSP/2d_karma_package"
+url: "https://github.com/VitorBSP/2d_karma_package"
+authors:
+  - family-names: Pereira
+    given-names: "Vítor Bernardo Silveira"
+    email: vitorpereira3115@gmail.com
+  - family-names: Palm
+    given-names: "Bruna G."
+  - family-names: Bayer
+    given-names: "Fábio M."
+preferred-citation:
+  type: unpublished
+  title: "A Kumaraswamy-Based Spatial Model for Bounded Image Data"
+  authors:
+    - family-names: Pereira
+      given-names: "Vítor Bernardo Silveira"
+    - family-names: Palm
+      given-names: "Bruna G."
+    - family-names: Bayer
+      given-names: "Fábio M."
+  year: 2026
+  notes: "Unpublished manuscript; no DOI."
