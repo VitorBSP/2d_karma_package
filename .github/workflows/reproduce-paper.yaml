@@ -58,7 +58,16 @@ jobs:
         shell: bash
         run: Rscript analysis/ndvi/run_ndvi.R --output=analysis/output/ndvi
 
+      - name: Validate against the snapshot and the article
+        shell: bash
+        run: >
+          Rscript analysis/validate_results.R --rerun=FALSE
+          --ndvi_dir=analysis/output/ndvi
+          --mc_dir=analysis/output/simulations
+          --output=analysis/output/validation
+
       - name: Upload outputs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: paper-reproduction-${{ inputs.mode }}
