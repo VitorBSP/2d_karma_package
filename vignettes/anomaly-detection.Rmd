@@ -1,0 +1,150 @@
+---
+title: "Residual-based anomaly detection on NDVI images"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Residual-based anomaly detection on NDVI images}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7,
+                      fig.height = 3.4, fig.align = "center")
+library(karma2d)
+```
+
+A fitted 2-D KARMA model describes the "normal" spatial behaviour of an
+image. Pixels that the model finds hard to explain have large quantile
+residuals, so the residuals can be monitored like a Shewhart control chart
+(Phase II) after the model has been calibrated on an anomaly-free window
+(Phase I). Morphological opening then removes isolated false alarms. This
+vignette illustrates the procedure with the NDVI scene `ndvi_paraiba` and an
+artificial anomaly. The anomaly is injected by hand, so detection performance
+here is a demonstration and not a validation on real events.
+
+## Data and Phase I
+
+`ndvi_paraiba` is a 100 x 100 NDVI image with values in $(-1, 1)$. As in the
+article we rescale it to $(0,1)$ with $y = (x + 1)/2$ and use the lower-right
+50 x 50 block as the Phase I (calibration) window.
+
+```{r data}
+y <- (ndvi_paraiba + 1) / 2
+phase1 <- y[51:100, 51:100]
+fit <- karma2d_fit(phase1, order = c(1, 0))
+summary(fit)
+```
+
+Quantile residuals of the calibration window should look roughly standard
+normal, which justifies limits such as $\pm 3$. Here the bulk is close to
+normal, with a somewhat heavier right tail (about 1% of the pixels exceed 3 in
+absolute value):
+
+```{r phase1-resid}
+r1 <- karma2d_residuals(fit, newdata = phase1, padding = "duplicate")
+hist(r1, breaks = 40, freq = FALSE, main = "Phase I quantile residuals",
+     xlab = "residual")
+curve(dnorm(x), add = TRUE, lwd = 2)
+c(sd = sd(r1), outside_3 = sum(abs(r1) > 3))
+```
+
+## Phase II: an injected anomaly
+
+We copy the whole scene and set a 16 x 16 block (rows 5-20, columns 15-30) to
+a constant value of 0.3, far below the surrounding vegetation level. The
+residuals are computed for the **whole** scene with the Phase I model. The
+`padding = "duplicate"` option gives a residual for every pixel, including the
+first row and column.
+
+```{r inject}
+y_anom <- y
+y_anom[5:20, 15:30] <- 0.3
+truth <- matrix(FALSE, nrow(y), ncol(y))
+truth[5:20, 15:30] <- TRUE
+
+res <- karma2d_residuals(fit, newdata = y_anom, padding = "duplicate")
+summary(as.vector(res))
+```
+
+## Control limits and morphological post-processing
+
+`karma2d_detect_anomalies()` flags pixels whose residual lies outside
+$\pm$`limit` (here 3) and then applies a morphological operation with a
+structuring element; the default is opening with a 3 x 3 square, which
+removes isolated flagged pixels and small groups smaller than the element.
+For elongated features other shapes are possible (the GRDI application in
+the article uses a 3 x 5 element), e.g.
+`karma2d_structuring_element(3, 5)`.
+
+```{r detect}
+det <- karma2d_detect_anomalies(res, limit = 3,
+                                structuring_element =
+                                  karma2d_structuring_element(3, 3),
+                                morphology = "opening")
+det
+```
+
+```{r maps, fig.height = 3.6}
+show <- function(m, main, col = hcl.colors(32, "viridis"), ...) {
+  image(t(m[rev(seq_len(nrow(m))), ]), main = main, axes = FALSE,
+        col = col, ...)
+}
+op <- par(mfrow = c(1, 4), mar = c(0.5, 0.5, 2, 0.5))
+show(y_anom, "Scene with anomaly")
+show(pmax(pmin(res, 6), -6), "Residuals (clipped)",
+     col = hcl.colors(32, "Blue-Red 3"), zlim = c(-6, 6))
+show(det$threshold_mask * 1, "Outside +/-3", col = c("white", "black"))
+show(det$detected_mask * 1, "After opening", col = c("white", "black"))
+par(op)
+```
+
+Isolated flagged pixels in the threshold mask (second black panel) are natural
+false alarms: with a standard normal reference a limit of 3 flags about 0.27%
+of the pixels even without anomalies. Opening removes most of them.
+
+## Performance metrics
+
+Because the true anomaly is known we can compute the pixel-wise confusion
+counts.
+
+```{r confusion}
+tp <- sum(det$detected_mask & truth)
+fp <- sum(det$detected_mask & !truth)
+fn <- sum(!det$detected_mask & truth)
+c(recall = tp / (tp + fn), precision = tp / (tp + fp),
+  detected = sum(det$detected_mask), true_anomaly = sum(truth))
+```
+
+The whole injected block is recovered (recall 1); the extra detected pixels
+are a thin rim along the bottom and right edges of the block (one pixel wide
+in this run), where pixels have anomalous pixels as their upper and left
+neighbours and therefore are mispredicted too. This is why
+precision is below one.
+
+`karma2d_metrics()` computes MAE, MSE, SMAPE (in percent) and RMSLE of the
+predicted median against the observed image. We evaluate the clean scene on
+the calibration region and on the full scene (all on the rescaled $(0,1)$
+scale):
+
+```{r metrics}
+pred <- predict(fit, newdata = y, padding = "duplicate")
+calib <- karma2d_metrics(y[51:100, 51:100], pred[51:100, 51:100])
+full  <- karma2d_metrics(y, pred)
+rbind(calibration = calib, full_scene = full)
+```
+
+Accuracy on the full scene is similar to (here slightly better than) that on
+the calibration window; the model was fitted only to the latter, so this
+indicates that the Phase I window is representative of the rest of the clean
+scene, not that the fit is optimal everywhere.
+
+## Notes
+
+* The limits assume that the residuals of the in-control image are close to
+  standard normal. Always inspect the Phase I residual histogram and the
+  output of `karma2d_diagnostics()` before trusting a limit.
+* `limit` can also be a vector `c(lower, upper)` for asymmetric limits, and
+  `morphology` can be `"closing"`, `"erosion"`, `"dilation"` or `"none"`.
+* The residuals are computed from the neighbours actually observed in the
+  scene, so an anomaly also perturbs the predictions of the pixels below and
+  to the right of it.

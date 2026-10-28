@@ -1,0 +1,325 @@
+---
+title: "The 2-D KARMA model: formulation, likelihood and information"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{The 2-D KARMA model: formulation, likelihood and information}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6,
+                      fig.height = 3.2, fig.align = "center")
+library(karma2d)
+```
+
+This vignette documents the statistical formulation implemented in `karma2d`,
+following Pereira, Palm and Bayer (2026), and records where the package
+deliberately differs from the article (the conditional Fisher information).
+No theoretical property of the process itself (for example stationarity or
+invertibility conditions on the coefficients) is claimed here: these remain
+open problems, and the package does not check them.
+
+## The Kumaraswamy distribution in the median parametrization
+
+The Kumaraswamy distribution with shape parameters $\varphi > 0$ and
+$\delta > 0$ has density
+$$
+f(y) = \varphi\,\delta\,y^{\varphi-1}\,(1-y^{\varphi})^{\delta-1},
+\qquad 0 < y < 1 .
+$$
+Reparametrizing by the median $\mu \in (0,1)$ requires
+$F(\mu) = 1/2$, which gives
+$$
+\delta = \frac{\log 0.5}{\log\left(1-\mu^{\varphi}\right)} .
+$$
+The distribution function and the quantile function are
+$$
+F(y) = 1-\left(1-y^{\varphi}\right)^{\delta},
+\qquad
+Q(p) = \left[1-(1-p)^{1/\delta}\right]^{1/\varphi}.
+$$
+These are available as `dkuma()`, `pkuma()`, `qkuma()` and `rkuma()`. For a
+general support $(a, b)$ the variable is rescaled to $(y-a)/(b-a)$; the median
+`median` and the arguments of the functions refer to the **original** scale.
+
+```{r kuma}
+mu <- 0.4
+phi <- 5
+pkuma(mu, median = mu, shape = phi)                 # 0.5 by construction
+qkuma(0.5, median = mu, shape = phi)
+# Support (-1, 1): median on the original scale
+pkuma(0.2, median = 0.2, shape = phi, lower = -1, upper = 1)
+# The density integrates to one
+integrate(dkuma, 0, 1, median = mu, shape = phi)$value
+```
+
+## The 2-D KARMA model
+
+Let $y[n,m]$ be the pixel in row $n$ and column $m$, conditionally
+Kumaraswamy with median $\mu[n,m]$ and shape $\varphi$, given the pixels in
+its strongly causal neighbourhood. With a strictly increasing differentiable
+link $g:(0,1)\to\mathbb{R}$ (logit by default; probit, cloglog and cauchit are
+also available), the linear predictor is
+$$
+\eta[n,m] = g(\mu[n,m]) = \alpha
+ + \sum_{(i,j)} \phi_{(i,j)}\, g\!\left(y[n-i,m-j]\right)
+ + \sum_{(k,l)} \theta_{(k,l)}\, e[n-k,m-l],
+$$
+with errors $e[n,m] = g(y[n,m]) - \eta[n,m]$. The AR sum runs over
+$i,j \in \{0,\dots,p\}$ and the MA sum over $k,l \in \{0,\dots,q\}$,
+excluding $(0,0)$.
+
+**Lag convention.** In $\phi_{(i,j)}$ the first index $i$ is the **row** lag
+and the second index $j$ the **column** lag. The coefficients are stored in the
+order $(0,1),(0,2),\dots,(0,p),(1,0),(1,1),\dots,(p,p)$ (row lag varying
+slowest), so that an order-$p$ model has $(p+1)^2-1$ coefficients:
+
+```{r lags}
+karma2d_lags(1)
+karma2d_lags(2)
+```
+
+## Conditional likelihood
+
+Pixels with $n \le w$ or $m \le w$, where $w = \max(p, q)$, do not have a
+complete neighbourhood. The likelihood is conditional on them: the recursion
+starts with $e = 0$ on these borders, and only the pixels with row and column
+greater than $w$ contribute,
+$$
+\ell(\gamma,\varphi) = \sum_{n=w+1}^{N}\sum_{m=w+1}^{M}
+ \Big[\log\varphi + \log\delta[n,m] + (\varphi-1)\log y[n,m]
+ + (\delta[n,m]-1)\log\left(1-y[n,m]^{\varphi}\right)\Big],
+$$
+where $\gamma = (\alpha, \phi^\top, \theta^\top)^\top$ and $\delta[n,m]$ is
+computed from $\mu[n,m] = g^{-1}(\eta[n,m])$. The number of pixels used is
+$(N-w)(M-w)$, returned by `nobs()`.
+
+## Optimization
+
+`karma2d_fit()` maximizes $\ell$ with `stats::optim(method = "BFGS")` and the
+analytic score (below). The shape is optimized on the log scale,
+$\vartheta = \log\varphi$, so every trial value is valid; the score is
+transformed by the chain rule,
+$\partial\ell/\partial\vartheta = \varphi\,\partial\ell/\partial\varphi$, and
+estimates are reported for $\varphi$. This can be changed with
+`karma2d_control(shape_transform = "identity")`.
+
+Starting values (see `karma2d_start()`) are $\alpha_0 = g(\bar y)$, all AR and
+MA coefficients equal to zero, and
+$\varphi_0 = 0.3\,\big(\bar y(1-\bar y)/S^2 - 1\big)$, with $\bar y$ and $S^2$
+the sample mean and variance of the rescaled image. If this value is not
+positive, the shape starts at 1 with a warning.
+
+```{r start}
+y <- karma2d_simulate(20, 20, alpha = 0.2, ar = c(0.3, 0.2, -0.1),
+                      shape = 8, seed = 3)
+karma2d_start(y, order = c(1, 0))
+```
+
+## Score vector
+
+Write $u = \mu^{\varphi}$, $L = \log(1-u)$, so that $\delta = \log(0.5)/L$, and
+$$
+A = \frac{\varphi\,\mu^{\varphi-1}}{(1-u)\,L},
+\qquad
+B = \frac{u\log\mu}{(1-u)\,L}
+\quad\Big(= \tfrac{1}{\delta}\,\tfrac{\partial\delta}{\partial\varphi}\Big).
+$$
+Per pixel,
+$$
+\frac{\partial \ell}{\partial \mu} = A\,\big[1+\delta\log(1-y^{\varphi})\big],
+\qquad
+\frac{\partial \ell}{\partial \varphi} = \frac1\varphi + \log y
+ + B\,\big[1+\delta\log(1-y^{\varphi})\big]
+ - (\delta-1)\frac{y^{\varphi}\log y}{1-y^{\varphi}} .
+$$
+By the chain rule, for $\gamma_k$ a component of $\gamma$,
+$$
+\frac{\partial\ell}{\partial\gamma_k} = \sum_{n,m}
+ \frac{\partial\ell}{\partial\mu[n,m]}\,
+ \frac{d\mu[n,m]}{d\eta[n,m]}\,
+ \frac{\partial\eta[n,m]}{\partial\gamma_k}.
+$$
+The derivatives of the linear predictor satisfy recursions over the same
+neighbourhood (Appendix A of the article), with zeros on the borders:
+$$
+\begin{aligned}
+\frac{\partial\eta[n,m]}{\partial\alpha} &= 1 - \sum_{(s,t)}\theta_{(s,t)}
+  \frac{\partial\eta[n-s,m-t]}{\partial\alpha},\\
+\frac{\partial\eta[n,m]}{\partial\phi_{(i,j)}} &= g(y[n-i,m-j]) - \sum_{(s,t)}\theta_{(s,t)}
+  \frac{\partial\eta[n-s,m-t]}{\partial\phi_{(i,j)}},\\
+\frac{\partial\eta[n,m]}{\partial\theta_{(k,l)}} &= e[n-k,m-l] - \sum_{(s,t)}\theta_{(s,t)}
+  \frac{\partial\eta[n-s,m-t]}{\partial\theta_{(k,l)}}.
+\end{aligned}
+$$
+`karma2d_score()` evaluates this score; a quick check against central
+differences of `karma2d_loglik()`:
+
+```{r score}
+par_true <- c(alpha = 0.2, 0.3, 0.2, -0.1, shape = 8)
+s_analytic <- karma2d_score(y, par_true, order = c(1, 0))
+s_numeric <- vapply(seq_along(par_true), function(k) {
+  h <- 1e-5
+  up <- par_true
+  dn <- par_true
+  up[k] <- up[k] + h
+  dn[k] <- dn[k] - h
+  (karma2d_loglik(y, up, c(1, 0)) - karma2d_loglik(y, dn, c(1, 0))) / (2 * h)
+}, numeric(1))
+cbind(analytic = s_analytic, numeric = s_numeric)
+```
+
+## Conditional Fisher information (corrected)
+
+The package computes the conditional expected information in closed form per
+pixel. Two facts about the model drive the calculation. If $Y$ is Kumaraswamy
+with median $\mu$ and shape $\varphi$, then
+
+* $E = -\delta\log(1-Y^{\varphi}) \sim \text{Exp}(1)$, and
+* $X = Y^{\varphi} \sim \text{Beta}(1,\delta)$,
+
+and the $\mu$-score is $\partial\ell/\partial\mu = A\,(1-E)$. Define
+$$
+h(\delta) = \frac{\psi(2)-\psi(\delta+1)}{\delta-1},
+\qquad
+t(\delta) = \frac{\big(\psi(\delta)-\psi(2)\big)^2+\psi'(2)-\psi'(\delta)}{\delta-2},
+$$
+with $\psi$ the digamma function. Both have removable singularities
+(at $\delta=1$ and $\delta=2$) which the package handles. The per-pixel
+expected information is
+$$
+\begin{aligned}
+K_{\mu\mu} &= A^2,\\
+K_{\mu\varphi} &= A\Big(B + \frac{\delta\,h(\delta)}{\varphi}\Big),\\
+K_{\varphi\varphi} &= \frac{1}{\varphi^2} + B^2
+ + \frac{2\delta B\,h(\delta)}{\varphi} + \frac{\delta\,t(\delta)}{\varphi^2}.
+\end{aligned}
+$$
+For the whole image, with $D[n,m] = \partial\eta[n,m]/\partial\gamma$ and sums
+over the effective region,
+$$
+K_{\gamma\gamma} = \sum K_{\mu\mu}\Big(\frac{d\mu}{d\eta}\Big)^2 D D^\top,
+\qquad
+K_{\gamma\varphi} = \sum K_{\mu\varphi}\,\frac{d\mu}{d\eta}\,D,
+\qquad
+K_{\varphi\varphi}\ \text{summed over pixels.}
+$$
+
+### Differences with Appendix B of the article
+
+In the notation of the article, with
+$\lambda_k = \mu^{k\varphi-2}/\big((1-u)^k L^k\big)$ and
+$\kappa$ the Euler constant, the corrected quantities are
+$$
+K_{\varphi\varphi} = \frac1{\varphi^2} + \mu^2\lambda_2\log^2\mu
+ + 2\delta\mu^2\log\mu\,\lambda_1\,\frac{1-\psi(\delta+1)-\kappa}{(\delta-1)\varphi}
+ + \delta\,\frac{\psi(\delta)\big(\psi(\delta)+2(\kappa-1)\big)-\psi'(\delta)+k_0}
+ {(\delta-2)\varphi^2},
+$$
+where $k_0$ is the constant defined in the article (it collects the
+$\psi(2)$ and $\psi'(2)$ terms), and the last two terms together equal
+$2\delta B\,h(\delta)/\varphi + \delta\,t(\delta)/\varphi^2$ in the notation above.
+Appendix B of the article has **minus** signs on the second
+and fourth terms. With those signs $K_{\varphi\varphi}$ can be negative: for
+$\mu = 0.5$ and $\varphi = 3$ it gives $-1.55$, whereas the correct value is
+$0.161$. Likewise $K_{\mu\varphi}$ above equals minus the article's
+$d[n,m]$. The sign of $K_{\gamma\varphi}$ does not affect the standard
+errors (it is equivalent to $\varphi \mapsto -\varphi$), but the errors in
+$K_{\varphi\varphi}$ do. The formulas used by the package were verified
+against numerical integration to about eight significant digits for $\delta$
+from $0.25$ to $2400$, and the package test suite repeats this check.
+
+### A pixel-level numerical check
+
+Using $E\sim\text{Exp}(1)$, put $t = E \in (0,\infty)$; then
+$y^{\varphi} = 1-\exp(-t/\delta)$, and the score for $\varphi$ is an explicit
+function of $t$. Its expected square, $\int s(t)^2 e^{-t}\,dt$, must equal
+$K_{\varphi\varphi}$.
+
+```{r pixel-check}
+mu <- 0.5
+phi <- 3
+u <- mu^phi
+log1mu <- log1p(-u)
+delta <- log(0.5) / log1mu
+b_term <- u * log(mu) / ((1 - u) * log1mu)
+h <- (digamma(2) - digamma(delta + 1)) / (delta - 1)
+tt <- ((digamma(delta) - digamma(2))^2 + trigamma(2) - trigamma(delta)) /
+  (delta - 2)
+k_phiphi <- 1 / phi^2 + b_term^2 + 2 * delta * b_term * h / phi +
+  delta * tt / phi^2
+
+# Score for phi as a function of t = -delta * log(1 - y^phi)
+score_phi <- function(t) {
+  log_y <- log(-expm1(-t / delta)) / phi
+  # ratio of y^phi to one minus y^phi
+  ratio <- expm1(t / delta)
+  1 / phi + log_y + b_term * (1 - t) - (delta - 1) * ratio * log_y
+}
+k_numeric <- integrate(function(t) score_phi(t)^2 * exp(-t), 0, 60)$value
+c(closed_form = k_phiphi, integrate = k_numeric)
+```
+
+### Expected versus observed information on an image
+
+`karma2d_information()` returns the expected information at given parameter
+values; `type = "observed"` returns minus the Hessian of the log-likelihood
+(central differences of the analytic score). They are close, not identical, on
+a finite image:
+
+```{r information}
+fit <- karma2d_fit(y, order = c(1, 0))
+info_exp <- karma2d_information(y, coef(fit), order = c(1, 0))
+info_obs <- karma2d_information(y, coef(fit), order = c(1, 0),
+                                type = "observed")
+round(info_exp, 1)
+round(info_obs, 1)
+# Standard errors implied by each
+rbind(expected = sqrt(diag(solve(info_exp))),
+      observed = sqrt(diag(solve(info_obs))))
+# karma2d_fisher() does the same starting from a fitted object
+all.equal(karma2d_fisher(fit), info_exp)
+```
+
+## Residuals
+
+The residuals of a fit are the quantile residuals
+$$
+r[n,m] = \Phi^{-1}\!\Big(F\big(y[n,m]\mid\hat\mu[n,m],\hat\varphi\big)\Big),
+$$
+with $\Phi$ the standard normal distribution function. They are computed from
+whichever tail of $F$ is smaller to avoid overflow for extreme pixels. They
+are `NA` on the borders unless padding is used (next section).
+`karma2d_residuals()` also supports `type = "response"` and `type = "link"`,
+and residuals for new images.
+
+```{r residuals}
+r <- residuals(fit)
+c(mean = mean(r, na.rm = TRUE), sd = sd(r, na.rm = TRUE))
+```
+
+## Prediction at the borders
+
+Without padding, `predict()` returns `NA` for the first $w$ rows and columns.
+With `padding = "duplicate"` the image is extended before filtering: the
+first $2w$ rows are copied on top of the image, then the first $2w$ columns of
+the result are copied on its left, giving an $(N+2w)\times(M+2w)$ array; the
+filter is run on it and the original window is returned. The article calls
+this "mirror padding", but the rows and columns are copied **without being
+reversed**, exactly as in the original scripts, and the package follows that
+behaviour.
+
+```{r padding}
+pred <- predict(fit, padding = "duplicate")
+sum(is.na(pred))
+# For an autoregressive model (q = 0) the interior pixels do not depend on
+# the padding, so they coincide with the unpadded predictions
+p0 <- predict(fit)
+all.equal(pred[-1, -1], p0[-1, -1])
+```
+
+## Reference
+
+Pereira, V. B. S., Palm, B. G. and Bayer, F. M. (2026). A Kumaraswamy-based
+spatial model for bounded image data. Manuscript.

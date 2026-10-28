@@ -1,0 +1,134 @@
+---
+title: "Reproducing the results of the article"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Reproducing the results of the article}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+The `karma2d` package contains the methods of Pereira, Palm and Bayer (2026).
+The scripts that regenerate the tables and figures of the article live in the
+`analysis/` directory of the **source repository**
+(<https://github.com/VitorBSP/2d_karma_package>). That directory is not part
+of the installed package, because the full Monte Carlo study takes hours and
+should never run during package checks. This vignette gives the exact
+commands and, importantly, an honest summary of what could and could not be
+reproduced. Nothing below is evaluated when the vignette is built.
+
+## Setup
+
+Clone the repository, install the package and run every command **from the
+repository root**:
+
+```{sh setup-commands, eval = FALSE}
+git clone https://github.com/VitorBSP/2d_karma_package
+cd 2d_karma_package
+Rscript -e 'remotes::install_local(".")'
+```
+
+## Monte Carlo study (Section 4.1; Tables 1-3)
+
+```{sh monte-carlo, eval = FALSE}
+# Development / continuous integration: few replications, minutes
+Rscript analysis/simulations/run_monte_carlo.R --mode=quick
+
+# Full study: 10,000 replications per scenario, image sizes 10, 25 and 50
+Rscript analysis/simulations/run_monte_carlo.R --mode=full --cores=8
+
+# Summaries: mean, bias, MSE, skewness, kurtosis and coverage of the
+# estimators, with a comparison against Tables 1-3 of the article
+Rscript analysis/simulations/summarize_monte_carlo.R
+```
+
+The runner saves a checkpoint after each scenario (and image size), so an
+interrupted `--mode=full` run can be resumed by repeating the same command.
+Every replication uses its own random-number stream derived from the master
+seed, so the results do not depend on `--cores`.
+
+## NDVI application (Section 4.2.1; Tables 4-5, Figures 4-7)
+
+```{sh ndvi, eval = FALSE}
+Rscript analysis/ndvi/run_ndvi.R
+```
+
+It uses the `ndvi_paraiba` dataset shipped with the package. It fits the 2-D
+KARMA and the Gaussian 2-D ARMA models on the Phase I window, computes the
+prediction metrics, the anomaly detection results and the figures, and writes a
+comparison with the published values.
+
+## GRDI application (Section 4.2.2)
+
+```{sh grdi, eval = FALSE}
+Rscript analysis/grdi/run_grdi.R --input=PATH/TO/grdi.csv
+```
+
+This requires the GRDI CSV file, which is **not** in the repository.
+
+## Reproduction status
+
+The following observations were made when re-running the original code and
+the new pipeline. They are reported as found; the causes of the
+discrepancies that remain open are not known.
+
+### Monte Carlo
+
+* The parameter values in the original simulation scripts for
+  KARMA(1,0) ($\alpha = 0.67$, $\phi = (0.31, 0.21, -0.15)$, $\varphi = 23$)
+  and KARMA(0,1) ($\alpha = 0.12$, $\theta = (0.1, 0.02, -0.12)$,
+  $\varphi = 11$) **differ from the values reported in Tables 1 and 2** of
+  the article (which were taken from the NDVI and GRDI fits). KARMA(1,1)
+  matches Table 3.
+* The pipeline uses the values of the article's tables by default and keeps the
+  values of the original scripts available as an alternative scenario set
+  (`--scenario_set=legacy_scripts`).
+* The original scripts did not compute coverage rates, so it is not known how
+  the coverage figures of the article were obtained. The new pipeline computes
+  coverage from the expected information, the observed information and the
+  matrix used by the original code.
+
+### NDVI, Table 4 (estimates and standard errors)
+
+* The estimates of the 2-D KARMA(1,0) and Gaussian 2-D ARMA(0,1) models and
+  their standard errors reproduce the article to within one unit of the last
+  printed decimal, **except the standard error of the shape parameter**.
+* The article's value 0.2855 is reproduced exactly only by the information
+  matrix of the original code, which mixes the **expected** blocks for the
+  $\gamma$ parameters with the **observed** $\varphi\varphi$ entry. The
+  corrected expected information gives 0.356 and the observed information
+  0.315 (see `vignette("model-theory")` for the corrected formulas).
+
+### NDVI, Table 5 (prediction metrics)
+
+* The KARMA calibration-area MAE, MSE and RMSLE reproduce.
+* The SMAPE values, the full-scene KARMA metrics and **all** Gaussian metrics
+  do **not** reproduce; for example the Gaussian calibration MAE is 0.0299
+  when computed here versus 0.0612 published. Two hypotheses were tested and
+  rejected: that the original scripts computed MAPE rather than SMAPE (it
+  matches neither), and that the Gaussian model was an ARMA(1,1). The cause is
+  unresolved.
+* With the metrics as computed, the advantage of KARMA over the Gaussian
+  model in prediction accuracy is much smaller than reported. In anomaly
+  detection, on the other hand, the KARMA residuals recover the whole
+  injected anomaly (recall 1.00, precision about 0.90) versus a recall of about
+  0.79 for the Gaussian model.
+
+### Model selection
+
+The automated model selection (significance, then parsimony, then MSE)
+selects the 2-D KARMA(1,0) model on the NDVI Phase I window, as in the
+article.
+
+### GRDI
+
+The GRDI application is **not reproducible from the repository**: the input
+file is missing and the crop extent was not recorded.
+
+## Details
+
+A detailed account, with the evidence for each statement above, is in
+`docs/technical-audit.md` in the source repository.
