@@ -121,8 +121,20 @@ run_application <- function(config) {
                recall = sum(d & truth) / sum(truth),
                precision = if (sum(d) > 0) sum(d & truth) / sum(d) else NA)
   }
-  detection <- rbind(detection_summary(karma_table$model[1], det_karma),
-                     detection_summary(gauss_table$model[1], det_gauss))
+  # The original scripts called EBImage::erode()/dilate() without `kern`,
+  # i.e. with EBImage's default makeBrush(5, shape = "diamond"), not the
+  # element stated in the article; both are reported.
+  diamond <- abs(row(matrix(0, 5, 5)) - 3) + abs(col(matrix(0, 5, 5)) - 3) <= 2
+  det_karma_d <- karma2d_detect_anomalies(r_karma, 3, diamond)
+  det_gauss_d <- karma2d_detect_anomalies(r_gauss, 3, diamond)
+  detection <- rbind(
+    cbind(element = "article", rbind(
+      detection_summary(karma_table$model[1], det_karma),
+      detection_summary(gauss_table$model[1], det_gauss))),
+    cbind(element = "EBImage default 5x5 diamond", rbind(
+      detection_summary(karma_table$model[1], det_karma_d),
+      detection_summary(gauss_table$model[1], det_gauss_d)))
+  )
   utils::write.csv(detection, file.path(out_dir, "anomaly-detection.csv"),
                    row.names = FALSE)
 
