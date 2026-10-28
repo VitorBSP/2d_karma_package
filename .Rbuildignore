@@ -1,0 +1,14 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.github$
+^analysis$
+^data-raw$
+^docs$
+^_pkgdown\.yml$
+^pkgdown$
+^README\.Rmd$
+^\.lintr$
+^codecov\.yml$
+^CITATION\.cff$
+^renv$
+^renv\.lock$

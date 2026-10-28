@@ -1,0 +1,29 @@
+#' NDVI image of a semi-arid region of Paraiba, Brazil
+#'
+#' A 100 x 100 image of the normalized difference vegetation index (NDVI)
+#' derived from the MODIS/Terra Vegetation Indices 16-Day L3 Global 250 m
+#' product (MOD13Q1), covering part of the state of Paraiba, Brazil
+#' (Caatinga biome). This is the scene analysed in Section 4.2.1 of Pereira,
+#' Palm and Bayer (2026), where its lower-right 50 x 50 block
+#' (`ndvi_paraiba[51:100, 51:100]`) is the Phase I calibration window.
+#'
+#' Values are NDVI on its natural scale (-1, 1); use `lower = -1, upper = 1`
+#' in [karma2d_fit()] or rescale by `(x + 1) / 2`, as in the article. The
+#' matrix has no missing values. Rows run from north to south and columns
+#' from west to east.
+#'
+#' @format A numeric matrix with 100 rows and 100 columns and attributes
+#'   `extent` (`xmin, xmax, ymin, ymax`, degrees) and `crs` (`"EPSG:4326"`,
+#'   WGS 84 longitude/latitude; pixel size about 0.00241 degrees).
+#' @source NASA LP DAAC, MODIS/Terra Vegetation Indices 16-Day L3 Global
+#'   250 m SIN Grid (MOD13Q1), \url{https://modis.gsfc.nasa.gov/data/dataprod/mod13.php}.
+#'   File `NDVI_2019_10.tif` of the original project repository (composite
+#'   10 of 2019, consistent with the "May 2019" scene of the article). The
+#'   exact product version and download date were not recorded in the
+#'   original project; see `docs/data-provenance.md` in the source
+#'   repository. NASA data are distributed without restriction on reuse.
+#' @examples
+#' dim(ndvi_paraiba)
+#' range(ndvi_paraiba)
+#' image(t(ndvi_paraiba[nrow(ndvi_paraiba):1, ]), main = "NDVI")
+"ndvi_paraiba"

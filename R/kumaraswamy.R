@@ -74,6 +74,15 @@ kuma_delta <- function(m, shape) {
   log(0.5) / log1p(-m^shape)
 }
 
+# Keep dim and dimnames of the first argument, as base R d/p/q functions do.
+keep_shape <- function(out, x) {
+  if (!is.null(dim(x)) && length(out) == length(x)) {
+    dim(out) <- dim(x)
+    dimnames(out) <- dimnames(x)
+  }
+  out
+}
+
 kuma_invalid <- function(m, shape, lower, upper) {
   !is.na(m) & !is.na(shape) & !is.na(lower) & !is.na(upper) &
     (lower >= upper | m <= 0 | m >= 1 | shape <= 0 | !is.finite(shape))
@@ -82,6 +91,7 @@ kuma_invalid <- function(m, shape, lower, upper) {
 #' @rdname kumaraswamy
 #' @export
 dkuma <- function(x, median, shape, lower = 0, upper = 1, log = FALSE) {
+  x_in <- x
   a <- recycle_args(x, median, shape, lower, upper)
   x <- a[[1]]
   lower <- a[[4]]
@@ -102,7 +112,7 @@ dkuma <- function(x, median, shape, lower = 0, upper = 1, log = FALSE) {
   out[ok & !inside] <- -Inf
   out[invalid] <- NaN
   if (any(invalid)) warning("NaNs produced", call. = FALSE)
-  if (log) out else exp(out)
+  keep_shape(if (log) out else exp(out), x_in)
 }
 
 # log(1 - z^shape), accurate for z close to 0 and to 1.
@@ -119,6 +129,7 @@ kuma_log_survival <- function(z, m, shape) {
 #' @export
 pkuma <- function(q, median, shape, lower = 0, upper = 1,
                   lower.tail = TRUE, log.p = FALSE) {
+  q_in <- q
   a <- recycle_args(q, median, shape, lower, upper)
   lower <- a[[4]]
   width <- a[[5]] - lower
@@ -137,13 +148,14 @@ pkuma <- function(q, median, shape, lower = 0, upper = 1,
   out <- if (lower.tail) log1mexp(log_surv) else log_surv
   out[invalid] <- NaN
   if (any(invalid)) warning("NaNs produced", call. = FALSE)
-  if (log.p) out else exp(out)
+  keep_shape(if (log.p) out else exp(out), q_in)
 }
 
 #' @rdname kumaraswamy
 #' @export
 qkuma <- function(p, median, shape, lower = 0, upper = 1,
                   lower.tail = TRUE, log.p = FALSE) {
+  p_in <- p
   a <- recycle_args(p, median, shape, lower, upper)
   p <- a[[1]]
   lower <- a[[4]]
@@ -168,7 +180,7 @@ qkuma <- function(p, median, shape, lower = 0, upper = 1,
   out[ok] <- lower[ok] + width[ok] * z
   out[invalid] <- NaN
   if (any(invalid)) warning("NaNs produced", call. = FALSE)
-  out
+  keep_shape(out, p_in)
 }
 
 #' @rdname kumaraswamy

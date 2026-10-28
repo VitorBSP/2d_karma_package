@@ -7,7 +7,7 @@
 karma2d_control(
   shape_transform = c("log", "identity"),
   maxit = 500L,
-  reltol = sqrt(.Machine$double.eps),
+  reltol = 1e-10,
   information = c("expected", "observed"),
   trace = 0L
 )
@@ -23,7 +23,10 @@ handles by step reduction.}
 
 \item{maxit}{Maximum number of BFGS iterations (passed to \code{\link[stats:optim]{stats::optim()}}).}
 
-\item{reltol}{Relative convergence tolerance (passed to \code{\link[stats:optim]{stats::optim()}}).}
+\item{reltol}{Relative convergence tolerance (passed to \code{\link[stats:optim]{stats::optim()}}).
+The default \code{1e-10} is tighter than the \code{optim()} default
+(\eqn{\approx 1.5 \times 10^{-8}}), which can stop about \eqn{10^{-4}}
+away from the maximum for images of a few thousand pixels.}
 
 \item{information}{Information matrix used for the covariance matrix:
 \code{"expected"} (conditional Fisher information, default) or \code{"observed"}

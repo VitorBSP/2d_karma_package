@@ -11,3 +11,6 @@
 #' autoregressive moving average model for SAR image modeling.
 #' *Computational Statistics & Data Analysis*, 171, 107453.
 "_PACKAGE"
+
+#' @importFrom stats coef fitted logLik nobs predict residuals vcov
+NULL

@@ -21,6 +21,7 @@ Description: Conditional maximum likelihood estimation, simulation,
     post-processing, and image quality metrics.
 License: MIT + file LICENSE
 Encoding: UTF-8
+LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.1
 Depends:

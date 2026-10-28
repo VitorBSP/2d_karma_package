@@ -9,6 +9,9 @@
 #'   handles by step reduction.
 #' @param maxit Maximum number of BFGS iterations (passed to [stats::optim()]).
 #' @param reltol Relative convergence tolerance (passed to [stats::optim()]).
+#'   The default `1e-10` is tighter than the `optim()` default
+#'   (\eqn{\approx 1.5 \times 10^{-8}}), which can stop about \eqn{10^{-4}}
+#'   away from the maximum for images of a few thousand pixels.
 #' @param information Information matrix used for the covariance matrix:
 #'   `"expected"` (conditional Fisher information, default) or `"observed"`
 #'   (minus the Hessian of the log-likelihood, by central differences of the
@@ -19,7 +22,7 @@
 #' karma2d_control(maxit = 1000)
 #' @export
 karma2d_control <- function(shape_transform = c("log", "identity"),
-                            maxit = 500L, reltol = sqrt(.Machine$double.eps),
+                            maxit = 500L, reltol = 1e-10,
                             information = c("expected", "observed"),
                             trace = 0L) {
   shape_transform <- match.arg(shape_transform)
@@ -256,7 +259,17 @@ karma2d_inference <- function(par, z, z_link, order, link_obj, type) {
   }
   nm <- names(par)
   dimnames(info) <- list(nm, nm)
-  vc <- matrix(NA_real_, length(par), length(par), dimnames = list(nm, nm))
+  out <- covariance_from_information(info)
+  out$type <- type
+  out
+}
+
+# Invert an information matrix only when it is numerically positive
+# definite. Never regularizes: otherwise the covariance is NA and the reason
+# is reported.
+covariance_from_information <- function(info, rcond_tol = 1e-12) {
+  vc <- info
+  vc[] <- NA_real_
   rc <- NA_real_
   status <- "unavailable"
   message <- NULL
@@ -269,7 +282,7 @@ karma2d_inference <- function(par, z, z_link, order, link_obj, type) {
     } else {
       rc <- rcond(info)
       vc[] <- chol2inv(chol_info)
-      if (rc < 1e-12) {
+      if (rc < rcond_tol) {
         status <- "ill-conditioned"
         message <- sprintf(paste0(
           "The information matrix is ill-conditioned (reciprocal condition ",
@@ -284,6 +297,6 @@ karma2d_inference <- function(par, z, z_link, order, link_obj, type) {
     warning(message, if (status == "unavailable")
       " Standard errors are not available." else "", call. = FALSE)
   }
-  list(information = info, vcov = vc, status = status,
-       message = message, type = type, rcond = rc)
+  list(information = info, vcov = vc, status = status, message = message,
+       rcond = rc)
 }

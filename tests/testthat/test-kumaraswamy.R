@@ -160,3 +160,8 @@ test_that("rkuma with length(n) > 1 uses length(n)", {
   set.seed(4)
   expect_length(rkuma(c(1, 2, 3), 0.5, 2), 3L)
 })
+
+test_that("matrix input keeps its dimensions", {
+  x <- matrix(c(0.1, 0.4, 0.6, 0.9), 2)
+  expect_equal(dim(pkuma(x, 0.5, 2)), c(2L, 2L))
+})
