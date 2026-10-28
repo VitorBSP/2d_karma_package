@@ -369,8 +369,14 @@ reports KARMA(0,1). About 24 % of the values of the committed CSV are exactly
 
 ### 5.4 Monte Carlo results
 
-See `docs/monte-carlo-r1000.md` (1,000 replications per cell; the full
-10,000-replication run was not executed in this environment).
+Full table: `docs/monte-carlo-r1000.md`. It is based on 1,000 replications
+per cell; the article's 10,000-replication run was not executed in this
+environment and remains pending (about 4 h on 3 cores). All 9,000 fits
+converged. 51 of 54 means agree with Tables 1-3 within two Monte Carlo
+standard errors. MSEs agree except for the 10 x 10 images (e.g. KARMA(1,1)
+alpha 0.133 vs 0.017), which suggests extreme small-image estimates not
+reflected in the article. Coverage rates reproduce the article's pattern,
+including the under-coverage of phi(1,1) and theta(1,1).
 
 ## 6. Anomaly-detection post-processing
 
