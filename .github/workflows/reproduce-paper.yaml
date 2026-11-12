@@ -1,0 +1,75 @@
+# Manual workflow to reproduce the simulation and NDVI results of the paper.
+# Trigger from the Actions tab (workflow_dispatch) or with `gh workflow run`.
+#
+# NOTE: The GRDI pipeline (analysis/grdi) is NOT run here because its input
+# data are not in the repository.
+name: reproduce-paper.yaml
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Simulation mode: quick (smoke test) or full (paper settings)'
+        type: choice
+        options:
+          - quick
+          - full
+        default: quick
+        required: true
+      replications:
+        description: 'Optional number of Monte Carlo replications (leave empty for the default of the chosen mode)'
+        type: string
+        default: ''
+        required: false
+
+permissions: read-all
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::terra, local::.
+
+      - name: Run Monte Carlo simulations
+        shell: bash
+        run: |
+          args="--mode=${{ inputs.mode }} --cores=2 --output=analysis/output/simulations"
+          if [ -n "${{ inputs.replications }}" ]; then
+            args="$args --replications=${{ inputs.replications }}"
+          fi
+          Rscript analysis/simulations/run_monte_carlo.R $args
+
+      - name: Summarize Monte Carlo simulations
+        shell: bash
+        run: Rscript analysis/simulations/summarize_monte_carlo.R --input=analysis/output/simulations
+
+      - name: Run NDVI analysis
+        shell: bash
+        run: Rscript analysis/ndvi/run_ndvi.R --output=analysis/output/ndvi
+
+      - name: Validate against the snapshot and the article
+        shell: bash
+        run: >
+          Rscript analysis/validate_results.R --rerun=FALSE
+          --ndvi_dir=analysis/output/ndvi
+          --mc_dir=analysis/output/simulations
+          --output=analysis/output/validation
+
+      - name: Upload outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-reproduction-${{ inputs.mode }}
+          path: analysis/output/
+          if-no-files-found: warn

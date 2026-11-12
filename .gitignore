@@ -1,3 +1,16 @@
 
 2DKARMA/ndvi/nasa/povmap-grdi-v1.tif
 grdi/data/nasa_corte_india_expandido.csv
+
+# R package development
+.Rproj.user
+.Rhistory
+.RData
+*.Rcheck/
+karma2d_*.tar.gz
+inst/doc
+/doc/
+/Meta/
+pkgdown-site/
+# Outputs of the reproduction pipelines
+analysis/output/

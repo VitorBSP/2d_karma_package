@@ -1,0 +1,51 @@
+url: ~
+destination: pkgdown-site
+
+template:
+  bootstrap: 5
+
+reference:
+  - title: "Model fitting and methods"
+    contents:
+      - karma2d_fit
+      - karma2d_control
+      - karma2d_start
+      - karma2d_fit-methods
+      - predict.karma2d_fit
+      - residuals.karma2d_fit
+  - title: "Inference"
+    contents:
+      - karma2d_loglik
+      - karma2d_fisher
+  - title: "Simulation"
+    contents:
+      - karma2d_simulate
+  - title: "Residuals and anomaly detection"
+    contents:
+      - karma2d_residuals
+      - karma2d_detect_anomalies
+      - karma2d_structuring_element
+      - morphology
+      - karma2d_diagnostics
+      - karma2d_metrics
+  - title: "Model structure"
+    contents:
+      - karma2d_lags
+  - title: "Kumaraswamy distribution"
+    contents:
+      - kumaraswamy
+  - title: "Data"
+    contents:
+      - ndvi_paraiba
+  - title: "Package"
+    contents:
+      - karma2d-package
+
+articles:
+  - title: "Articles"
+    contents:
+      - getting-started
+      - model-theory
+      - simulation-and-inference
+      - anomaly-detection
+      - reproducing-the-paper

@@ -1,0 +1,29 @@
+bibentry(
+  "Unpublished",
+  title = "A Kumaraswamy-Based Spatial Model for Bounded Image Data",
+  author = c(
+    person("V\u00edtor Bernardo Silveira", "Pereira"),
+    person("Bruna G.", "Palm"),
+    person("F\u00e1bio M.", "Bayer")
+  ),
+  year = "2026",
+  note = "Unpublished manuscript",
+  textVersion = paste(
+    "Pereira, V. B. S., Palm, B. G. and Bayer, F. M. (2026).",
+    "A Kumaraswamy-Based Spatial Model for Bounded Image Data.",
+    "Unpublished manuscript."
+  )
+)
+
+bibentry(
+  "Manual",
+  title = "karma2d: Two-Dimensional Kumaraswamy Autoregressive Moving Average Models",
+  author = c(
+    person("V\u00edtor Bernardo Silveira", "Pereira"),
+    person("Bruna G.", "Palm"),
+    person("F\u00e1bio M.", "Bayer")
+  ),
+  year = "2026",
+  note = paste("R package version", meta$Version),
+  url = "https://github.com/VitorBSP/2d_karma_package"
+)

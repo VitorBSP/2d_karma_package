@@ -1,0 +1,4 @@
+"table","row","reason"
+"ndvi_paper","2-D KARMA(1,0) shape se","Published SE comes from the legacy mixed information matrix; corrected expected information gives 0.356 (Sec. 3.5, 5.2)"
+"ndvi_paper","2-D ARMA(0,1) as published Calibration Area SMAPE","Computed 7.21250 vs printed 7.2126 (difference 1.0e-4, at the tolerance): last-digit difference in the Gaussian estimates, which the authors obtained with optim defaults and no analytic gradient"
+"monte_carlo_paper","karma01 25 theta(1,1) coverage","Coverage 0.915 with 1,000 replications vs 0.948 in the article (about 4 Monte Carlo SE); a second stream of 500 replications gave 0.930 and both optimizer settings agree on the same images; unresolved, reassess with the full 10,000-replication run"
