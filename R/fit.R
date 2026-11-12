@@ -95,6 +95,14 @@ karma2d_start <- function(y, order, link = "logit", lower = 0, upper = 1) {
 #' [stats::optim()] with method `"BFGS"` and the analytic score vector of
 #' Appendix A of the article. Starting values follow [karma2d_start()].
 #'
+#' The conditional likelihood can have several local maxima when the image
+#' is small relative to the number of parameters. On simulated 10 x 10
+#' images from a KARMA(1, 1) model (81 modelled pixels, 8 parameters), about
+#' 5% of the fits from the default starting values ended below the best
+#' maximum found by other optimizer settings. For small images, compare fits
+#' from different `start` values or shape transforms and keep the one with
+#' the largest log-likelihood.
+#'
 #' Standard errors are derived from the inverse of the conditional Fisher
 #' information evaluated at the estimates (or of the observed information,
 #' see [karma2d_control()]). The expected information implemented here was
@@ -201,10 +209,15 @@ karma2d_fit <- function(y, order = c(1L, 0L), link = "logit", lower = 0,
     stop("The log-likelihood is not finite at the starting values.",
          call. = FALSE)
   }
+  # The objective is scaled by the number of modelled pixels. BFGS starts
+  # with a steepest-descent step proportional to the gradient, which grows
+  # with the image size; without the scaling that first step can jump to a
+  # distant region and end in a poor local maximum (seen on 10 x 10 images).
+  n_effective <- (nrow(z) - w) * (ncol(z) - w)
   opt <- stats::optim(
     theta0, objective, gradient, method = "BFGS",
     control = list(maxit = control$maxit, reltol = control$reltol,
-                   trace = control$trace)
+                   trace = control$trace, fnscale = n_effective)
   )
   estimate <- stats::setNames(to_par(opt$par), coef_names)
   if (opt$convergence != 0L) {

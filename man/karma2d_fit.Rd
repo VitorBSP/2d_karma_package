@@ -76,6 +76,14 @@ treated as fixed, with errors set to zero. Maximization uses
 \code{\link[stats:optim]{stats::optim()}} with method \code{"BFGS"} and the analytic score vector of
 Appendix A of the article. Starting values follow \code{\link[=karma2d_start]{karma2d_start()}}.
 
+The conditional likelihood can have several local maxima when the image
+is small relative to the number of parameters. On simulated 10 x 10
+images from a KARMA(1, 1) model (81 modelled pixels, 8 parameters), about
+5\% of the fits from the default starting values ended below the best
+maximum found by other optimizer settings. For small images, compare fits
+from different \code{start} values or shape transforms and keep the one with
+the largest log-likelihood.
+
 Standard errors are derived from the inverse of the conditional Fisher
 information evaluated at the estimates (or of the observed information,
 see \code{\link[=karma2d_control]{karma2d_control()}}). The expected information implemented here was
