@@ -89,8 +89,11 @@ result_tables <- list(
                                                "model-selection.csv"),
                               keys = c("p", "q"), rel_tol = 1e-3,
                               keep = function(t) t$p < 3 & t$q < 3),
+  # The bias is mean - truth: its numerical error is that of the mean, so
+  # its tolerance is taken relative to the parameter, not to the bias.
   monte_carlo = list(file = file.path(mc_dir, "paper", "summary.csv"),
-                     keys = c("scenario", "size", "parameter"))
+                     keys = c("scenario", "size", "parameter"),
+                     scale_by = c(bias = "truth"))
 )
 
 # Snapshot file for a table; Monte Carlo snapshots are per configuration.
@@ -119,7 +122,7 @@ if (as.logical(opts$update_snapshot)) {
 
 # Compare two tables cell by cell on their numeric columns.
 compare_tables <- function(new, ref, keys, check, label,
-                           table_tol = rel_tol) {
+                           table_tol = rel_tol, scale_by = NULL) {
   key_new <- do.call(paste, c(new[keys], sep = " | "))
   key_ref <- do.call(paste, c(ref[keys], sep = " | "))
   rows <- list()
@@ -135,7 +138,13 @@ compare_tables <- function(new, ref, keys, check, label,
   for (col in intersect(numeric_cols, names(new))) {
     a <- ref[[col]][match(intersect(key_ref, key_new), key_ref)]
     b <- new[[col]][match(intersect(key_ref, key_new), key_new)]
-    tol <- table_tol * pmax(abs(a), 1e-3)
+    scale <- abs(a)
+    if (col %in% names(scale_by)) {
+      scale_col <- ref[[scale_by[[col]]]]
+      scale <- pmax(scale, abs(scale_col[match(intersect(key_ref, key_new),
+                                               key_ref)]))
+    }
+    tol <- table_tol * pmax(scale, 1e-3)
     both_na <- is.na(a) & is.na(b)
     ok <- both_na | (!is.na(a) & !is.na(b) & abs(a - b) <= tol)
     rows[[length(rows) + 1]] <- data.frame(
@@ -183,7 +192,8 @@ if ("regression" %in% checks) {
     table_tol <- result_tables[[name]]$rel_tol
     report[[length(report) + 1]] <- compare_tables(
       new, ref, result_tables[[name]]$keys, "regression", name,
-      if (is.null(table_tol)) rel_tol else max(rel_tol, table_tol))
+      if (is.null(table_tol)) rel_tol else max(rel_tol, table_tol),
+      result_tables[[name]]$scale_by)
   }
 }
 
