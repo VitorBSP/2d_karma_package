@@ -3,7 +3,7 @@
 # Usage (from the repository root, after installing karma2d):
 #   Rscript analysis/grdi/run_grdi.R --input=PATH/nasa_corte_india_expandido.csv
 #       [--output=analysis/output/grdi] [--karma_order=0,1]
-#       [--gaussian_order=0,1] [--select=TRUE]
+#       [--gaussian_order=0,1] [--select=TRUE] [--procedure=article]
 #
 # DATA AVAILABILITY. The original scripts read
 # `grdi/data/nasa_corte_india_expandido.csv`, a CSV export of a crop of the
@@ -23,6 +23,15 @@
 #   2. Phase I window: rows/columns 51:100. Synthetic anomaly: pixels
 #      [19:23, 41:50] set to 0.1.
 #   3.-7. As for NDVI, with a 3 x 5 rectangular structuring element.
+#
+# PROCEDURE. The authors' archive that reproduces the NDVI results (Tables
+# 4-5) did not include the GRDI scripts. The anomaly value (0.1) and the
+# window above are therefore those of the scripts first committed to the
+# repository (analysis/legacy/grdi/), not verified against the article's
+# own computation; the NDVI procedure "article" (effective-region
+# calibration metrics, unpadded recursion cropped by 2w, opening then
+# closing, Gaussian residuals divided by sigma_hat) is applied for
+# consistency. --procedure=padded gives the earlier pipeline.
 
 local({
   if (!file.exists("analysis/R/common.R")) {
@@ -36,7 +45,7 @@ local({
 opts <- parse_args(list(input = "", output = file.path("analysis", "output",
                                                          "grdi"),
                         karma_order = "0,1", gaussian_order = "0,1",
-                        select = "TRUE"))
+                        select = "TRUE", procedure = "article"))
 if (!nzchar(opts$input) || !file.exists(opts$input)) {
   stop(paste(
     "The GRDI input CSV is required: --input=PATH/nasa_corte_india_expandido.csv.",
@@ -70,6 +79,7 @@ run_application(list(
   gaussian_order = as.integer(strsplit(opts$gaussian_order, ",")[[1]]),
   structuring_element = karma2d_structuring_element(3, 5),
   select = as.logical(opts$select),
+  procedure = opts$procedure,
   article_choice = "2-D KARMA(0, 1)",
   published = utils::read.csv(file.path("analysis", "grdi",
                                         "published-values.csv")),

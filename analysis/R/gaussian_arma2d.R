@@ -71,3 +71,24 @@ gaussian_arma2d_predict <- function(fit, newdata, padding = "duplicate") {
   eta[!(row(eta) > w & col(eta) > w)] <- NA
   eta
 }
+
+# Full-scene prediction of the Gaussian benchmark as printed in the article
+# (Table 5 and the Gaussian detection maps), kept ONLY to reproduce the
+# published numbers: the identity-scale coefficients (alpha, phi, theta)
+# were applied in the logit recursion of 2-D KARMA, eta from qlogis(y),
+# prediction plogis(eta), on the unpadded image. NA in the first w rows and
+# columns. Not a valid prediction of the Gaussian model; use
+# gaussian_arma2d_predict().
+gaussian_arma2d_published <- function(fit, newdata) {
+  order <- fit$order
+  w <- max(order)
+  cf <- fit$coefficients
+  p1 <- (order[1] + 1)^2 - 1
+  q1 <- (order[2] + 1)^2 - 1
+  rec <- karma2d:::karma2d_recursion_r(stats::qlogis(newdata), cf[1],
+                                       cf[seq_len(p1) + 1],
+                                       cf[seq_len(q1) + 1 + p1], order)
+  mu <- stats::plogis(rec$eta)
+  mu[!(row(mu) > w & col(mu) > w)] <- NA
+  mu
+}

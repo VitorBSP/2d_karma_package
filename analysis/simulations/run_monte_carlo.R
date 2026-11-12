@@ -60,8 +60,12 @@ one_replication <- function(stream, s, size) {
   result <- list(estimate = empty, se_expected = empty, se_observed = empty,
                  se_legacy = empty, convergence = NA_integer_,
                  error = NA_character_)
+  # burn_in = max(p, q) is the simulator that produced Tables 1-3 of the
+  # article (simu_2dkarma.R of the authors' simulation folder); the package
+  # default, 2 * max(p, q), is the one of the scripts first committed here.
   y <- tryCatch(karma2d_simulate(size, size, alpha = s$alpha, ar = s$ar,
-                                 ma = s$ma, shape = s$shape),
+                                 ma = s$ma, shape = s$shape,
+                                 burn_in = max(order)),
                 error = function(e) e)
   if (inherits(y, "error")) {
     result$error <- paste("simulation:", conditionMessage(y))
@@ -114,6 +118,7 @@ for (k in seq_len(nrow(cells))) {
   file <- file.path(out_dir, sprintf("%s_%dx%d.rds", name, size, size))
   config <- list(scenario = s, size = size, replications = replications,
                  seed = master_seed, cell_index = cell_index,
+                 burn_in = "max(p, q)",
                  scenario_set = opts$scenario_set,
                  karma2d_version = as.character(
                    utils::packageVersion("karma2d")))

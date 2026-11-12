@@ -17,6 +17,39 @@ Run everything from the repository root after installing the package
 | GRDI application (Tables 6-7, Figures 8-10) | `Rscript analysis/grdi/run_grdi.R --input=PATH/nasa_corte_india_expandido.csv` | `analysis/output/grdi/`; the input file is not in the repository |
 | Validate that the pipelines still give the results already obtained, and compare with the article | `Rscript analysis/validate_results.R` | `analysis/output/validation/validation-report.csv`; exit status 1 on any unexpected difference |
 
+### NDVI procedure
+
+By default (`--procedure=article`) the NDVI pipeline follows the procedure
+of the authors' scripts that produced Tables 4-5 and Figures 4-7:
+
+1. `y = (NDVI + 1) / 2`, Phase I window rows/columns 51:100, synthetic
+   anomaly `y[5:20, 15:30] <- 0.01`.
+2. Calibration metrics: the Phase I window against the fitted values of the
+   same fit, on its effective region (rows/columns > w, w = max(p, q)), no
+   padding.
+3. Full scene: the recursion (Eq. 8) runs on the unpadded image with the
+   anomaly; the first 2w rows and columns are dropped from the image, the
+   prediction and the residuals (98 x 98 for w = 1).
+4. Quantile residuals, limits +/-3, opening followed by closing with a
+   3 x 3 square.
+5. Gaussian ARMA benchmark on the identity scale, standardized residuals
+   `(y - prediction) / sigma_hat`.
+
+The Gaussian rows printed in Table 5 contain two defects: the calibration
+prediction was compared with its transpose (a row-major vector against a
+column-major matrix), and on the full scene the identity-scale Gaussian
+coefficients were applied in the logit recursion of 2-D KARMA. The
+pipeline reports the corrected benchmark as `2-D ARMA(p,q)` and, only for
+traceability with the article, the published computation as
+`2-D ARMA(p,q) as published` (in `table5-metrics.csv`,
+`anomaly-detection.csv` and `fig-detection-gaussian-as-published.png`); the
+article's Gaussian values are compared with the latter.
+`--procedure=padded` runs the earlier pipeline of this repository
+(duplicate padding, metrics on the N x M image, opening only, Gaussian
+residuals divided by their standard deviation). The GRDI pipeline uses the
+same procedure; its scripts were not in the authors' archive (see the
+header of `grdi/run_grdi.R`).
+
 ### Validating the results
 
 `analysis/validate_results.R` reruns the NDVI pipeline and the quick Monte
@@ -39,7 +72,7 @@ Validate outputs already produced without rerunning, e.g. the
 
 ```
 Rscript analysis/validate_results.R --rerun=FALSE \
-  --mc_dir=analysis/output/simulations_r1000 --ndvi_dir=analysis/output/ndvi
+  --mc_dir=analysis/output/simulations_r1000b --ndvi_dir=analysis/output/ndvi
 ```
 
 After an intended change of results (for example a correction), regenerate
@@ -50,7 +83,8 @@ the validation on every pull request.
 Other options: `--replications=N`, `--scenario_set=legacy_scripts` (the
 parameter values hard-coded in the original scripts), `--scenarios=karma11`,
 `--seed=N`, `--output=DIR`; for the applications `--karma_order=p,q`,
-`--gaussian_order=p,q`, `--select=FALSE` (skip model selection).
+`--gaussian_order=p,q`, `--select=FALSE` (skip model selection),
+`--procedure=article|padded`.
 
 Each output directory contains `session-info.txt` (R, package and GDAL
 versions). Monte Carlo replications use independent L'Ecuyer-CMRG streams
