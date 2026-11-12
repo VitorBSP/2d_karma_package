@@ -18,6 +18,12 @@ commands are given so that each can be re-checked.
 * Environment of the audit: Ubuntu 24.04, R 4.3.3, numDeriv 2016.8-1.1,
   terra 1.7-65, raster 3.6, testthat 3.2.1.
 
+> **Update (2026-11-12).** The authors' own simulation and NDVI scripts were
+> received after this audit and validated in
+> `docs/validation-authors-code.md`. They settle the provenance of Tables 1-3
+> and the Table 5 divergence, and reveal two defects in the Gaussian
+> benchmark. Sections 5 and 8 below were revised accordingly.
+
 ## 1. Inventory of the original repository
 
 ### 1.1 Layout
@@ -300,58 +306,51 @@ the three models:
 | KARMA(1,1) | 0.3, (0.3, -0.15, 0.23), (0.15, -0.1, 0.25), 17 | identical |
 
 The article says the first two were taken from the NDVI and GRDI fits, and the
-Table 1 and Table 2 values are indeed those of Tables 4 and 6. Therefore the
-scripts in the repository are not the ones that produced Tables 1 and 2. The
-pipeline uses the article's values (`--scenario_set=paper`) and keeps the
-script values (`--scenario_set=legacy_scripts`). The original scripts did not
-compute coverage rates, so which information matrix produced the published
-coverage is unknown. The pipeline reports coverage with the expected, the
-observed and the legacy matrix.
+Table 1 and Table 2 values are indeed those of Tables 4 and 6. The scripts
+first committed to this repository are therefore not the ones that produced
+the tables; the authors' simulation folder contains them
+(`docs/validation-authors-code.md`, Sec. 2). They use the article's values,
+10,000 replications, `set.seed(1)`, a simulator that discards only the
+`max(p, q)` initialization rows and columns, standard errors from the mixed
+information matrix, and they discard and redraw failed fits (about 1 % for
+KARMA(1,1) on 10 x 10 images). The pipeline uses the article's values
+(`--scenario_set=paper`) and the authors' burn-in, keeps the committed-script
+values (`--scenario_set=legacy_scripts`), and reports coverage with the
+expected, the observed and the mixed matrix.
 
 Results: see Sec. 5.4.
 
 ### 5.2 NDVI (Tables 4-5, Figures 4-7)
 
-Data: `NDVI_2019_10.tif` (`stack_all[[32]]` of the original script), rescaled
-by `(x + 1)/2`, Phase I `[51:100, 51:100]`, synthetic anomaly
-`[5:20, 15:30] = 0.3`. Note that the committed script fits KARMA(1,1)
-(`p = 1; q = 1`), while the article reports KARMA(1,0); the pipeline uses the
-article's order. Output of `Rscript analysis/ndvi/run_ndvi.R`:
+Data: `NDVI_2019_10.tif` (`stack_all[[32]]`), rescaled by `(x + 1)/2`,
+Phase I `[51:100, 51:100]`. The pipeline follows the procedure of the
+authors' NDVI scripts (`docs/validation-authors-code.md`, Sec. 5.1): synthetic
+anomaly `[5:20, 15:30] = 0.01`, calibration metrics on the Phase I fit,
+unpadded recursion with the first `2w` rows and columns dropped, opening then
+closing with a 3 x 3 box. The scripts first committed here (anomaly 0.3,
+KARMA(1,1), EBImage with its default 5 x 5 diamond) were a different version.
+Output of `Rscript analysis/ndvi/run_ndvi.R`:
 
 * **Model selection.** The automated rule (all parameters significant at 5 %,
   then fewest parameters, then smallest MSE) selects **2-D KARMA(1,0)**, as in
   the article. The article's graphical diagnostics are not automated.
-* **Table 4, KARMA(1,0).** Estimates 0.6609, 0.2819, 0.1897, 0.1653, 19.6064
-  (article: 19.6065). All agree within one unit of the last decimal.
-  Standard errors for alpha and phi agree (0.0278/0.0277, 0.0191, 0.0210,
-  0.0222). The shape standard error is **0.3564** with the verified expected
-  information and 0.3145 with the observed information. The article's
-  **0.2855** is reproduced exactly (0.2855) by the legacy mixed matrix.
-* **Table 4, Gaussian ARMA(0,1).** Estimates (0.8623, 0.4519, 0.4348, 0.3919,
-  sigma 0.0439) and standard errors reproduce the article.
-* **Table 5.** For KARMA(1,0) in the calibration area, MAE 0.0290 (0.0291),
-  MSE 0.00182 (0.0018) and RMSLE 0.0236 (0.0236) reproduce. SMAPE 3.458
-  (3.4711) does not, nor do the full-scene metrics, e.g. SMAPE 4.58 (7.69).
-  For the Gaussian model none of the metrics reproduce: MAE 0.0299 (0.0612)
-  calibration and 0.0327 (0.0620) full scene. Hypotheses tested and
-  rejected: (i) the metric is MAPE, as computed by the `mape()` of the
-  scripts: 3.55/5.34 for KARMA and 3.60/5.38 for the Gaussian model, which
-  does not match; (ii) a Gaussian ARMA(1,1), as committed in the script:
-  calibration MAE 0.0240. The committed NDVI KARMA script also compares
-  `y_anomaly` on the unit scale with `estimated_ndvi` on the NDVI scale
-  (`* 2 - 1`), which would give MAE of order 0.3, so it cannot be the source
-  of the table either. **Cause unresolved.** With the computed metrics, the
-  prediction-accuracy advantage of KARMA over the Gaussian model is much
-  smaller than reported (calibration MAE 0.0290 vs 0.0299; on the full scene
-  the Gaussian model has slightly lower MSE and RMSLE).
-* **Anomaly detection** (|r| > 3, opening with the 3 x 3 square): KARMA
-  detects 286 pixels, 256 of the 256 anomalous pixels (recall 1.00,
-  precision 0.90); Gaussian detects 206, 202 of them (recall 0.79, precision
-  0.98). The original scripts called `EBImage::erode()`/`dilate()` without a
-  `kern` argument. They therefore used EBImage's default
-  `makeBrush(5, shape = "diamond")` (checked in the EBImage source), not the
-  3 x 3 square stated in the article, so the published figures were probably
-  produced with the diamond. The pipeline reports both.
+* **Table 4.** KARMA(1,0) and Gaussian ARMA(0,1) estimates and standard
+  errors agree within one unit of the last decimal, except the KARMA shape
+  standard error: **0.3564** with the verified expected information and
+  0.3145 with the observed information, against the article's **0.2855**,
+  which is the mixed matrix of the authors' code.
+* **Table 5, KARMA rows.** Reproduced to the printed precision (calibration
+  0.0291, 0.0018, 3.4711, 0.0236; full scene 0.0305, 0.0037, 7.6934, 0.0407).
+* **Table 5, Gaussian rows.** The published values are reproduced exactly
+  only by replicating two defects of the authors' Gaussian script: in the
+  calibration area the prediction is compared with its transpose, and on the
+  full scene the identity-scale Gaussian coefficients are passed through the
+  logit link. Corrected values: calibration MAE 0.0303 (published 0.0612),
+  full scene MAE 0.0371 (published 0.0620). The pipeline reports the
+  corrected benchmark and, separately, the "as published" rows.
+* **Anomaly detection** (98 x 98 region): KARMA recall 1.00, precision 0.89;
+  Gaussian as published detects nothing after post-processing (as in
+  Figure 7(d)); Gaussian corrected recall 0.98, precision 0.85.
 
 ### 5.3 GRDI (Tables 6-7, Figures 8-10)
 
@@ -369,14 +368,12 @@ reports KARMA(0,1). About 24 % of the values of the committed CSV are exactly
 
 ### 5.4 Monte Carlo results
 
-Full table: `docs/monte-carlo-r1000.md`. It is based on 1,000 replications
-per cell; the article's 10,000-replication run was not executed in this
-environment and remains pending (about 4 h on 3 cores). All 9,000 fits
-converged. 51 of 54 means agree with Tables 1-3 within two Monte Carlo
-standard errors. MSEs agree except for the 10 x 10 images (e.g. KARMA(1,1)
-alpha 0.133 vs 0.017), which suggests extreme small-image estimates not
-reflected in the article. Coverage rates reproduce the article's pattern,
-including the under-coverage of phi(1,1) and theta(1,1).
+Full table: `docs/monte-carlo-r1000.md` (1,000 replications per cell with
+the authors' simulator; the 10,000-replication run was not executed in this
+environment). An earlier version of that table showed much larger MSEs on
+10 x 10 images; that was an artefact of one package fit ending in a poor
+local maximum, fixed by scaling the objective
+(`docs/validation-authors-code.md`, Sec. 4.5).
 
 ## 6. Anomaly-detection post-processing
 
@@ -400,15 +397,19 @@ pull request.
 ## 8. Open questions for the authors
 
 1. Appendix B: confirm the corrected signs of `K_mu,phi` and `K_phi,phi`.
-2. Which information matrix should the article report? The published shape
+2. Which information matrix should the article report? The published
    standard errors come from the mixed matrix; with the expected information
    SE(phi) increases by about 25 % on the NDVI window.
-3. How were Table 5 and Table 7 computed (code version, metric definitions,
-   compared images)?
-4. Which code and seeds produced Tables 1-3 (the committed scripts use
-   different parameters and do not compute coverage)?
-5. Provide `nasa_corte_india_expandido.csv` (or the crop extent and GRDI
-   version) so the GRDI application can be reproduced.
-6. Which structuring element produced Figures 7 and 10?
+3. The Gaussian benchmark of Table 5 and Figure 7 has two defects
+   (`docs/validation-authors-code.md`, Sec. 5.2). Corrected, the gains in
+   the calibration area are about 4-6 % instead of 54-68 %, and the Gaussian
+   model detects the anomaly. Do Tables 6-7 and Figure 10 (GRDI) use the
+   same functions?
+4. The coverage of `phi(1,1)` and `theta(1,1)` in Table 3 does not approach
+   the nominal level (edge effect); the text should say so.
+5. Provide the GRDI scripts and `nasa_corte_india_expandido.csv` (or the
+   crop extent and GRDI version) so the GRDI application can be checked.
+6. Align the text with the code: border handling (no padding was used),
+   anomaly value, opening followed by closing.
 7. Licence of the package (MIT was set provisionally) and the roles of the
    co-authors in `DESCRIPTION`.
