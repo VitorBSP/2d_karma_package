@@ -34,9 +34,14 @@ First pre-release.
 
 * The legacy scripts are kept unchanged in `analysis/legacy`.
 * `rgdal`/`raster` were replaced by `terra` (the NDVI matrix is identical).
-* `EBImage` was replaced by base-R morphology. EBImage's default structuring
-  element is a 5x5 diamond, whereas the article states a 3x3 square / 3x5
-  rectangle; the pipelines use the article's elements.
+* `EBImage` (used by the scripts first committed) was replaced by base-R
+  morphology. The authors' NDVI scripts use `mmand` with a 3x3 box, opening
+  followed by closing; the pipelines do the same.
+* The BFGS objective is scaled by the number of modelled pixels. Without it,
+  a fit on a small image could end in a distant, poor local maximum.
+* The reproduction pipelines follow the authors' NDVI procedure and report
+  the Gaussian benchmark both corrected and "as published" (see
+  `docs/validation-authors-code.md`).
 * The subset-lag feature of the original simulator was removed because its
   index arithmetic selected the wrong lags.
 * The shape parameter is optimized on the log scale by default.

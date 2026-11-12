@@ -77,19 +77,23 @@ discrepancies that remain open are not known.
 
 ### Monte Carlo
 
-* The parameter values in the original simulation scripts for
-  KARMA(1,0) ($\alpha = 0.67$, $\phi = (0.31, 0.21, -0.15)$, $\varphi = 23$)
-  and KARMA(0,1) ($\alpha = 0.12$, $\theta = (0.1, 0.02, -0.12)$,
-  $\varphi = 11$) **differ from the values reported in Tables 1 and 2** of
-  the article (which were taken from the NDVI and GRDI fits). KARMA(1,1)
-  matches Table 3.
-* The pipeline uses the values of the article's tables by default and keeps the
-  values of the original scripts available as an alternative scenario set
-  (`--scenario_set=legacy_scripts`).
-* The original scripts did not compute coverage rates, so it is not known how
-  the coverage figures of the article were obtained. The new pipeline computes
-  coverage from the expected information, the observed information and the
-  matrix used by the original code.
+* Tables 1-3 were produced by the authors' simulation scripts (10,000
+  replications, `set.seed(1)`), which were validated against the package:
+  simulator, likelihood and score agree. The scripts first committed to the
+  repository used other parameter values for KARMA(1,0) and KARMA(0,1) and are
+  kept as the scenario set `--scenario_set=legacy_scripts`.
+* The pipeline uses the article's parameter values and the authors' simulator
+  (`burn_in = max(p, q)`), and computes coverage from the expected
+  information, the observed information and the matrix used by the authors'
+  code.
+* A run with 1,000 replications per cell agrees with the article: all 54
+  means are within three Monte Carlo standard errors, and the MSEs are between
+  0.90 and 1.27 times the published ones. The full 10,000-replication run
+  has not been executed.
+* The coverage of $\phi_{(1,1)}$ and $\theta_{(1,1)}$ in the ARMA model stays
+  near 0.86-0.91 at every image size: their bias decreases at the same rate
+  as their standard error (an edge effect of the conditional likelihood), so
+  Wald intervals for them are too narrow.
 
 ### NDVI, Table 4 (estimates and standard errors)
 
@@ -102,20 +106,26 @@ discrepancies that remain open are not known.
   corrected expected information gives 0.356 and the observed information
   0.315 (see `vignette("model-theory")` for the corrected formulas).
 
-### NDVI, Table 5 (prediction metrics)
+### NDVI, Table 5 (prediction metrics) and detection
 
-* The KARMA calibration-area MAE, MSE and RMSLE reproduce.
-* The SMAPE values, the full-scene KARMA metrics and **all** Gaussian metrics
-  do **not** reproduce; for example the Gaussian calibration MAE is 0.0299
-  when computed here versus 0.0612 published. Two hypotheses were tested and
-  rejected: that the original scripts computed MAPE rather than SMAPE (it
-  matches neither), and that the Gaussian model was an ARMA(1,1). The cause is
-  unresolved.
-* With the metrics as computed, the advantage of KARMA over the Gaussian
-  model in prediction accuracy is much smaller than reported. In anomaly
-  detection, on the other hand, the KARMA residuals recover the whole
-  injected anomaly (recall 1.00, precision about 0.90) versus a recall of about
-  0.79 for the Gaussian model.
+The pipeline follows the procedure of the authors' NDVI scripts: synthetic
+anomaly equal to 0.01, calibration metrics from the Phase I fit, recursion
+on the unpadded image with the first $2w$ rows and columns dropped, and
+opening followed by closing with a 3 x 3 box.
+
+* The KARMA rows reproduce to the printed precision.
+* The published Gaussian rows are reproduced only by replicating two defects
+  of the authors' Gaussian script: in the calibration area the prediction is
+  compared with its transpose, and on the full scene the Gaussian
+  coefficients (identity scale) are passed through the logit link. The
+  pipeline reports the corrected benchmark and, separately, the rows "as
+  published".
+* Corrected, the Gaussian calibration MAE is 0.0303 (published 0.0612)
+  against 0.0291 for KARMA, a gain of about 4 % instead of 54 %. On the full
+  scene the corrected Gaussian MAE is 0.0371 against 0.0305 for KARMA.
+* Detection: KARMA has recall 1.00 and precision 0.89. The Gaussian model as
+  published detects nothing; corrected, it has recall 0.98 and precision
+  0.85.
 
 ### Model selection
 
@@ -131,4 +141,5 @@ file is missing and the crop extent was not recorded.
 ## Details
 
 A detailed account, with the evidence for each statement above, is in
-`docs/technical-audit.md` in the source repository.
+`docs/technical-audit.md` and `docs/validation-authors-code.md` in the
+source repository.

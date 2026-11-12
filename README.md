@@ -110,9 +110,19 @@ repository (excluded from the package build). In summary:
 - **NDVI, Table 4:** reproduced, except the shape standard error. The published
   value (0.2855) comes from the original mixed information matrix; the
   corrected value is 0.356.
-- **NDVI, Table 5:** only partly reproduced; the cause is unresolved.
+- **NDVI, Table 5:** the KARMA rows are reproduced. The published Gaussian
+  rows come from two defects in the authors' Gaussian script (prediction
+  compared with its transpose; Gaussian coefficients passed through the logit
+  link). Corrected, the KARMA gain in the calibration area is about 4 %, not
+  54 %, and the Gaussian model also detects the injected anomaly (recall 0.98
+  against 1.00 for KARMA).
 - **GRDI:** not reproducible, because the input data are not in the repository.
-- **Monte Carlo study:** a pipeline is provided with quick and full modes.
+- **Monte Carlo study:** Tables 1-3 come from the authors' scripts, whose
+  simulator, likelihood and score agree with the package. A 1,000-replication
+  run of the pipeline agrees with the tables; the 10,000-replication run has
+  not been executed.
+
+Details: `docs/technical-audit.md` and `docs/validation-authors-code.md`.
 
 ## Limitations
 
@@ -121,6 +131,9 @@ repository (excluded from the package build). In summary:
 - No stationarity or invertibility conditions are proven for the model.
 - The first $\max(p, q)$ rows and columns (borders) are conditioned on, not
   modelled.
+- On small images (for example 10 x 10 with an ARMA(1,1) model) the
+  likelihood can have several local maxima; compare fits from different
+  starting values.
 - Large images are slow in pure R; a 50 x 50 ARMA(1,1) fit takes about 1.5 s.
 
 ## Citation
