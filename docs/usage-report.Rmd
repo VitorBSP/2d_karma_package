@@ -1,0 +1,736 @@
+---
+title: "Relatório de uso do pacote karma2d"
+output:
+  github_document:
+    html_preview: false
+---
+
+```{r setup, include = FALSE}
+render_start <- proc.time()[["elapsed"]]
+invisible(Sys.setlocale("LC_CTYPE", "C.UTF-8")) # accented text in R output
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 9,
+                      fig.height = 3.4, fig.align = "center", dpi = 90)
+options(width = 90)
+suppressPackageStartupMessages(library(karma2d))
+
+# Global table of checks -----------------------------------------------------
+checks <- data.frame(fun = character(), what = character(),
+                     expected = character(), observed = character(),
+                     status = character(), seconds = numeric(),
+                     stringsAsFactors = FALSE)
+# Global table of timed calls (one row per timed call, no double counting)
+timings <- data.frame(fun = character(), seconds = numeric(),
+                      stringsAsFactors = FALSE)
+last_time <- NA_real_
+
+# Evaluate `expr` in the caller's environment, record its elapsed time under
+# `fun` and return its value.
+tm <- function(fun, expr) {
+  value <- NULL
+  st <- system.time(value <- expr)[["elapsed"]]
+  timings[nrow(timings) + 1L, ] <<- list(fun, st)
+  last_time <<- st
+  invisible(value)
+}
+
+fmt <- function(x) {
+  if (is.character(x)) return(paste(x, collapse = ", "))
+  if (is.logical(x)) return(paste(x, collapse = ", "))
+  paste(formatC(x, digits = 6, format = "g"), collapse = ", ")
+}
+
+# Record one check: `ok` must be a single TRUE/FALSE computed from outputs.
+check <- function(fun, what, ok, expected, observed, seconds = last_time) {
+  ok <- isTRUE(ok)
+  checks[nrow(checks) + 1L, ] <<- list(fun, what, fmt(expected),
+                                       fmt(observed),
+                                       if (ok) "OK" else "FAIL", seconds)
+  cat(sprintf("[%s] %s: %s (esperado: %s; observado: %s)\n",
+              if (ok) "OK" else "FAIL", fun, what, fmt(expected),
+              fmt(observed)))
+  invisible(ok)
+}
+
+# Image display with row 1 at the top.
+show_img <- function(m, main, zlim = range(m, na.rm = TRUE),
+                     col = hcl.colors(64, "viridis")) {
+  image(t(m[rev(seq_len(nrow(m))), , drop = FALSE]), main = main,
+        axes = FALSE, col = col, zlim = zlim, useRaster = TRUE)
+  box()
+}
+show_mask <- function(m, main) {
+  show_img(m * 1, main, zlim = c(0, 1), col = c("grey95", "firebrick"))
+}
+```
+
+- **Data de geração:** `r Sys.Date()`
+- **Versão do R:** `r R.version.string`
+- **Versão do pacote karma2d:** `r as.character(utils::packageVersion("karma2d"))`
+- **Plataforma:** `r R.version$platform`
+
+Todos os resultados abaixo foram produzidos executando o código no momento
+da renderização deste documento: nenhuma saída foi copiada ou editada à mão.
+Toda geração aleatória usa `set.seed()` ou o argumento `seed=` das funções do
+pacote, de modo que o relatório é reprodutível.
+
+## Infraestrutura de verificação
+
+Um bloco de configuração oculto define duas tabelas globais e três funções
+auxiliares:
+
+- `tm(fun, expr)` avalia `expr` dentro de `system.time()`, registra o tempo
+  decorrido (segundos) sob o nome da função `fun` e devolve o valor;
+- `check(fun, what, ok, expected, observed)` registra uma verificação: nome da
+  função, o que foi verificado, o valor esperado, o valor observado, o status
+  (`OK`/`FAIL`) e o tempo da última chamada cronometrada. A condição `ok` é
+  sempre calculada a partir das saídas das funções (não é uma reafirmação);
+- `show_img()`/`show_mask()` desenham matrizes com a linha 1 no topo.
+
+Cada verificação é impressa no momento em que é feita, e a seção final
+reúne a tabela completa e um resumo por função. Um `FAIL` nunca é ocultado.
+
+## 1. Distribuição Kumaraswamy
+
+`dkuma()`, `pkuma()`, `qkuma()` e `rkuma()` implementam a distribuição
+Kumaraswamy parametrizada pela **mediana** e por um parâmetro de forma, em um
+suporte limitado `(lower, upper)`. É a distribuição condicional de cada pixel
+no modelo 2-D KARMA.
+
+```{r kuma}
+m <- 0.3; s <- 4
+tm("dkuma", d <- dkuma(c(0.1, 0.3, 0.6), median = m, shape = s))
+d
+tm("pkuma", p_med <- pkuma(m, median = m, shape = s))
+p_med
+check("pkuma", "propriedade da mediana: pkuma(m, m, s) == 0.5",
+      abs(p_med - 0.5) < 1e-12, 0.5, p_med)
+
+pp <- c(0.001, 0.1, 0.5, 0.9, 0.999)
+tm("qkuma", qq <- qkuma(pp, median = m, shape = s))
+qq
+err_inv <- max(abs(pkuma(qq, m, s) - pp))
+check("qkuma", "inversa: max |pkuma(qkuma(p)) - p|", err_inv < 1e-12,
+      "< 1e-12", err_inv)
+
+tm("dkuma", integ <- integrate(dkuma, 0, 1, median = m, shape = s)$value)
+check("dkuma", "densidade integra 1 em (0, 1)", abs(integ - 1) < 1e-6,
+      1, integ)
+
+# General support (-1, 1): median and quantiles on the original scale
+m_g <- 0.4
+gen <- c(p = pkuma(m_g, m_g, 5, lower = -1, upper = 1),
+         q = qkuma(0.5, m_g, 5, lower = -1, upper = 1),
+         int = integrate(dkuma, -1, 1, median = m_g, shape = 5,
+                         lower = -1, upper = 1)$value)
+gen
+check("pkuma", "suporte (-1, 1): F(mediana) = 0.5 e Q(0.5) = mediana",
+      abs(gen[["p"]] - 0.5) < 1e-12 && abs(gen[["q"]] - m_g) < 1e-12,
+      c(0.5, m_g), gen[c("p", "q")])
+
+x <- c(0.05, 0.5, 0.95)
+log_ok <- max(abs(dkuma(x, m, s, log = TRUE) - log(dkuma(x, m, s))))
+tail_ok <- max(abs(pkuma(x, m, s, lower.tail = FALSE) - (1 - pkuma(x, m, s))))
+check("dkuma", "log = TRUE igual a log(densidade); lower.tail = FALSE igual a 1 - F",
+      log_ok < 1e-12 && tail_ok < 1e-12, "< 1e-12", c(log_ok, tail_ok))
+
+n <- 1e4
+tm("rkuma", r <- { set.seed(101); rkuma(n, median = m, shape = s) })
+se_med <- 1 / (2 * dkuma(m, m, s) * sqrt(n))   # asymptotic SE of the median
+tol <- 4 * se_med
+c(sample_median = median(r), tolerance = tol)
+check("rkuma", "mediana amostral (n = 1e4) a menos de 4 EP assintóticos",
+      abs(median(r) - m) < tol, sprintf("%g +/- %.4f", m, tol), median(r))
+```
+
+A tolerância para `rkuma()` é de quatro erros-padrão assintóticos da mediana
+amostral, $1/\{2 f(m)\sqrt{n}\}$, isto é, cerca de
+`r signif(tol, 2)` para $n = 10^4$: uma amostra correta só falharia com
+probabilidade da ordem de $6\times10^{-5}$.
+
+## 2. Estrutura de defasagens
+
+`karma2d_lags()` lista as defasagens espaciais (linha, coluna) dos
+coeficientes de um modelo isotrópico de ordem `p`, na ordem em que os
+coeficientes são guardados em todo o pacote.
+
+```{r lags}
+tm("karma2d_lags", l1 <- karma2d_lags(1))
+l1
+tm("karma2d_lags", l2 <- karma2d_lags(2))
+nrow(l2)
+check("karma2d_lags", "número de coeficientes (p+1)^2 - 1 para p = 1, 2",
+      nrow(l1) == 3 && nrow(l2) == 8, c(3, 8), c(nrow(l1), nrow(l2)))
+ord <- paste0("(", l1$row_lag, ",", l1$col_lag, ")")
+check("karma2d_lags", "ordem (0,1), (1,0), (1,1) para p = 1",
+      identical(ord, c("(0,1)", "(1,0)", "(1,1)")),
+      "(0,1), (1,0), (1,1)", ord)
+```
+
+## 3. Simulação
+
+`karma2d_simulate()` gera uma imagem de um modelo 2-D KARMA pelo método da
+inversão. Usamos os valores do artigo para KARMA(1,0), KARMA(0,1) e
+KARMA(1,1).
+
+```{r simulate}
+tm("karma2d_simulate", y_ar <- karma2d_simulate(
+  40, 40, alpha = 0.6609, ar = c(0.2819, 0.1897, 0.1653),
+  shape = 19.6065, seed = 11))
+tm("karma2d_simulate", y_ma <- karma2d_simulate(
+  40, 40, alpha = 1.1114, ma = c(0.3467, 0.2819, 0.1848),
+  shape = 12.3857, seed = 12))
+tm("karma2d_simulate", y_arma <- karma2d_simulate(
+  40, 40, alpha = 0.3, ar = c(0.3, -0.15, 0.23), ma = c(0.15, -0.1, 0.25),
+  shape = 17, seed = 13))
+sapply(list(AR = y_ar, MA = y_ma, ARMA = y_arma), range)
+attr(y_arma, "karma2d")$parameters
+
+y_again <- karma2d_simulate(
+  40, 40, alpha = 0.3, ar = c(0.3, -0.15, 0.23), ma = c(0.15, -0.1, 0.25),
+  shape = 17, seed = 13)
+check("karma2d_simulate", "mesma semente gera imagem idêntica",
+      identical(y_again, y_arma), TRUE, identical(y_again, y_arma))
+
+set.seed(999)
+before <- .Random.seed
+invisible(karma2d_simulate(10, 10, alpha = 0.3, ar = c(0.3, -0.15, 0.23),
+                           shape = 17, seed = 1))
+check("karma2d_simulate", ".Random.seed global inalterado após seed =",
+      identical(before, .Random.seed), TRUE, identical(before, .Random.seed))
+
+all_in <- all(sapply(list(y_ar, y_ma, y_arma),
+                     function(v) all(v > 0 & v < 1)))
+check("karma2d_simulate", "valores estritamente em (0, 1) nos três modelos",
+      all_in, TRUE, all_in)
+
+tm("karma2d_simulate", y_pm <- karma2d_simulate(
+  40, 40, alpha = 0.3, ar = c(0.3, -0.15, 0.23), ma = c(0.15, -0.1, 0.25),
+  shape = 17, seed = 13, lower = -1, upper = 1))
+range(y_pm)
+dev_pm <- max(abs(y_pm - (2 * y_arma - 1)))
+check("karma2d_simulate",
+      "suporte (-1, 1): valores em (-1, 1) e iguais a 2*y - 1 (mesma semente)",
+      all(y_pm > -1 & y_pm < 1) && dev_pm < 1e-12, "< 1e-12", dev_pm)
+```
+
+```{r simulate-plot, fig.width = 4.2, fig.height = 4}
+show_img(y_arma, "KARMA(1,1) simulado, 40 x 40")
+```
+
+## 4. Ajuste
+
+`karma2d_start()` calcula os valores iniciais do artigo, `karma2d_control()`
+define as opções do otimizador e `karma2d_fit()` ajusta o modelo por máxima
+verossimilhança condicional (BFGS com escore analítico). Ajustamos um
+KARMA(1,1) à imagem 40 x 40 simulada acima.
+
+```{r fit}
+truth <- c(0.3, 0.3, -0.15, 0.23, 0.15, -0.1, 0.25, 17)
+tm("karma2d_start", st <- karma2d_start(y_arma, order = c(1, 1)))
+st
+z_bar <- mean(y_arma)
+st_hand <- c(qlogis(z_bar), rep(0, 6),
+             0.3 * (z_bar * (1 - z_bar) / var(as.vector(y_arma)) - 1))
+check("karma2d_start", "valores iniciais = (g(ȳ), 0, ..., 0, 0.3{ȳ(1-ȳ)/S² - 1})",
+      max(abs(unname(st) - st_hand)) < 1e-12, "< 1e-12",
+      max(abs(unname(st) - st_hand)))
+
+tm("karma2d_control", ctl <- karma2d_control())
+str(unclass(ctl))
+check("karma2d_control", "valores padrão (log, maxit 500, reltol 1e-10, expected)",
+      identical(ctl$shape_transform, "log") && ctl$maxit == 500L &&
+        ctl$reltol == 1e-10 && identical(ctl$information, "expected"),
+      "log, 500, 1e-10, expected",
+      c(ctl$shape_transform, ctl$maxit, ctl$reltol, ctl$information))
+
+tm("karma2d_fit", fit <- karma2d_fit(y_arma, order = c(1, 1)))
+fit
+check("karma2d_fit", "código de convergência do BFGS", fit$convergence == 0,
+      0, fit$convergence)
+z_err <- abs(coef(fit) - truth) / sqrt(diag(vcov(fit)))
+round(z_err, 2)
+check("karma2d_fit", "|estimativa - verdade| < 4 EP para todos os parâmetros",
+      all(z_err < 4), "< 4", max(z_err))
+
+tm("karma2d_score", sc <- karma2d_score(y_arma, coef(fit), order = c(1, 1)))
+sc_rel <- max(abs(sc)) / nobs(fit)
+check("karma2d_score", "escore na estimativa ≈ 0 (max |U| / nobs)",
+      sc_rel < 1e-4, "< 1e-4", sc_rel)
+
+tm("karma2d_fit", fit_obs <- karma2d_fit(
+  y_arma, order = c(1, 1), control = karma2d_control(information = "observed")))
+rbind(expected = sqrt(diag(vcov(fit))), observed = sqrt(diag(vcov(fit_obs))))
+check("karma2d_fit",
+      "information = 'observed': mesmas estimativas, inferência 'observed'/'ok'",
+      max(abs(coef(fit_obs) - coef(fit))) < 1e-12 &&
+        fit_obs$inference$type == "observed" &&
+        fit_obs$inference$status == "ok",
+      "diferença 0; observed; ok",
+      c(max(abs(coef(fit_obs) - coef(fit))), fit_obs$inference$type,
+        fit_obs$inference$status))
+
+tm("karma2d_fit", fit_id <- karma2d_fit(
+  y_arma, order = c(1, 1),
+  control = karma2d_control(shape_transform = "identity")))
+dll <- abs(as.numeric(logLik(fit_id)) - as.numeric(logLik(fit)))
+check("karma2d_control",
+      "shape_transform = 'identity' atinge a mesma log-verossimilhança",
+      dll < 1e-6, "< 1e-6", dll)
+```
+
+**Recomendação de múltiplos pontos de partida em imagens pequenas.** Em
+imagens pequenas a verossimilhança condicional pode ter vários máximos
+locais. A documentação de `karma2d_fit()` recomenda comparar ajustes com
+diferentes transformações do parâmetro de forma (ou diferentes `start`) e
+guardar o de maior log-verossimilhança. Num estudo preliminar das sementes
+1 a 5, a semente 5 foi a única em que as duas transformações chegaram a
+máximos diferentes; ela foi escolhida aqui por ilustrar o caso.
+
+```{r multistart}
+y10 <- karma2d_simulate(10, 10, alpha = 0.3, ar = c(0.3, -0.15, 0.23),
+                        ma = c(0.15, -0.1, 0.25), shape = 17, seed = 5)
+tm("karma2d_fit", fits10 <- list(
+  log = karma2d_fit(y10, order = c(1, 1)),
+  identity = karma2d_fit(y10, order = c(1, 1),
+                         control = karma2d_control(shape_transform = "identity"))))
+ll10 <- sapply(fits10, logLik)
+ll10
+best10 <- fits10[[which.max(ll10)]]
+names(fits10)[which.max(ll10)]
+check("karma2d_fit", "multi-start 10 x 10: ajuste mantido tem a maior log-verossimilhança",
+      as.numeric(logLik(best10)) == max(ll10) && all(sapply(fits10, `[[`, "convergence") == 0),
+      max(ll10), c(ll10, as.numeric(logLik(best10))))
+```
+
+## 5. Métodos S3
+
+Os objetos `karma2d_fit` têm os métodos usuais de modelos estatísticos do R.
+
+```{r methods}
+print(fit, digits = 4)
+tm("summary", sm <- summary(fit))
+sm
+coef(fit)
+round(vcov(fit)[1:3, 1:3], 6)
+tm("confint", ci <- confint(fit))
+round(ci, 4)
+half <- (ci[, 2] - ci[, 1]) / 2
+d_half <- max(abs(half - qnorm(0.975) * sqrt(diag(vcov(fit)))))
+check("confint", "meia-amplitude = qnorm(0.975) * EP", d_half < 1e-10,
+      "< 1e-10", d_half)
+
+c(logLik = logLik(fit), AIC = AIC(fit), BIC = BIC(fit), nobs = nobs(fit))
+k <- length(coef(fit))
+d_ic <- max(abs(c(AIC(fit) - (-2 * fit$loglik + 2 * k),
+                  BIC(fit) - (-2 * fit$loglik + log(nobs(fit)) * k))))
+check("logLik, AIC, BIC, nobs", "AIC/BIC = -2 logLik + {2, log(nobs)} * k e nobs = 39^2",
+      d_ic < 1e-8 && nobs(fit) == 39^2, c(0, 1521), c(d_ic, nobs(fit)))
+
+tm("predict", pr_none <- predict(fit, padding = "none"))
+f_hat <- fitted(fit)
+same_na <- identical(is.na(pr_none), is.na(f_hat))
+d_pf <- max(abs(pr_none - f_hat), na.rm = TRUE)
+check("predict, fitted", "predict nos dados de treino = fitted (incl. posição dos NA)",
+      same_na && d_pf < 1e-12, "< 1e-12; mesmos NA", c(d_pf, same_na))
+
+tm("predict", pr_dup <- predict(fit, padding = "duplicate"))
+c(NA_none = sum(is.na(pr_none)), NA_duplicate = sum(is.na(pr_dup)))
+# With an MA part the padded recursion also changes interior predictions,
+# because border errors are no longer zero:
+max(abs(pr_dup - pr_none), na.rm = TRUE)
+check("predict", "padding = 'duplicate' sem NA", !anyNA(pr_dup), 0,
+      sum(is.na(pr_dup)))
+
+tm("predict", pr_link <- predict(fit, type = "link", padding = "duplicate"))
+d_link <- max(abs(pr_link - qlogis(pr_dup)))
+check("predict", "type = 'link' = qlogis(predição da mediana)", d_link < 1e-10,
+      "< 1e-10", d_link)
+
+tm("residuals", rq <- residuals(fit))
+rr <- residuals(fit, type = "response")
+rl <- residuals(fit, type = "link")
+summary(as.vector(rq))
+d_resp <- max(abs(rr - (y_arma - f_hat)), na.rm = TRUE)
+eta_none <- predict(fit, type = "link", padding = "none")
+d_lres <- max(abs(rl - (qlogis(y_arma) - eta_none)), na.rm = TRUE)
+check("residuals", "response = y - fitted; link = g(y) - eta",
+      d_resp < 1e-12 && d_lres < 1e-8, "< 1e-12, < 1e-8", c(d_resp, d_lres))
+```
+
+## 6. Inferência (ferramentas de pesquisa)
+
+`karma2d_loglik()`, `karma2d_score()` e `karma2d_information()` avaliam a
+log-verossimilhança condicional, o escore analítico e a informação
+(esperada ou observada) em parâmetros arbitrários; `karma2d_fisher()` faz o
+mesmo para um ajuste. Comparamos com derivadas numéricas de `numDeriv`,
+avaliando em um ponto **diferente** da estimativa (a verdade), onde o escore
+não é nulo.
+
+```{r inference}
+ord11 <- c(1, 1)
+tm("karma2d_loglik", ll_hat <- karma2d_loglik(y_arma, coef(fit), ord11))
+check("karma2d_loglik", "karma2d_loglik na estimativa = logLik(fit)",
+      abs(ll_hat - fit$loglik) < 1e-8, fit$loglik, ll_hat)
+
+tm("karma2d_score", sc_true <- karma2d_score(y_arma, truth, ord11))
+round(sc_true, 3)
+num_grad <- numDeriv::grad(function(p) karma2d_loglik(y_arma, p, ord11), truth)
+rel_g <- max(abs(sc_true - num_grad)) / max(abs(num_grad))
+check("karma2d_score", "escore analítico vs numDeriv::grad (erro relativo)",
+      rel_g < 1e-5, "< 1e-5", rel_g)
+
+tm("karma2d_information", K <- karma2d_information(y_arma, truth, ord11))
+ev <- eigen(K, symmetric = TRUE, only.values = TRUE)$values
+check("karma2d_information", "informação esperada simétrica e positiva definida",
+      isSymmetric(K) && min(ev) > 0, "simétrica; menor autovalor > 0",
+      c(isSymmetric(K), min(ev)))
+
+tm("karma2d_information", J <- karma2d_information(y_arma, truth, ord11,
+                                                   type = "observed"))
+H <- numDeriv::hessian(function(p) karma2d_loglik(y_arma, p, ord11), truth)
+rel_h <- max(abs(J + H)) / max(abs(H))
+check("karma2d_information", "informação observada vs -numDeriv::hessian (erro relativo)",
+      rel_h < 1e-4, "< 1e-4", rel_h)
+
+tm("karma2d_fisher", Kf <- karma2d_fisher(fit))
+round(sqrt(diag(solve(Kf))), 4)
+d_fi <- max(abs(Kf - fit$information))
+check("karma2d_fisher", "karma2d_fisher(fit) = informação guardada no ajuste",
+      d_fi < 1e-8, "< 1e-8", d_fi)
+```
+
+A tolerância de $10^{-4}$ para a informação observada reflete que tanto o
+pacote (diferenças centrais do escore analítico) quanto `numDeriv::hessian`
+(extrapolação de Richardson da log-verossimilhança) são aproximações
+numéricas.
+
+## 7. Resíduos e diagnóstico
+
+`karma2d_residuals()` aplica um modelo ajustado a uma imagem nova (por
+exemplo, a cena completa após o ajuste em uma janela de calibração) e
+`karma2d_diagnostics()` resume os resíduos quantílicos.
+
+```{r residuals}
+tm("karma2d_fit", fit_q <- karma2d_fit(y_ar[21:40, 21:40], order = c(1, 0)))
+tm("karma2d_residuals", r_new <- karma2d_residuals(fit_q, newdata = y_ar,
+                                                    padding = "duplicate"))
+dim(r_new)
+check("karma2d_residuals", "dados novos com padding 'duplicate': 40 x 40 sem NA",
+      identical(dim(r_new), c(40L, 40L)) && !anyNA(r_new), "40 x 40, 0 NA",
+      c(dim(r_new), sum(is.na(r_new))))
+r_own <- karma2d_residuals(fit)
+check("karma2d_residuals", "sem newdata e padding 'none' = residuals(fit)",
+      identical(is.na(r_own), is.na(rq)) &&
+        max(abs(r_own - rq), na.rm = TRUE) < 1e-12,
+      "< 1e-12", max(abs(r_own - rq), na.rm = TRUE))
+
+v <- as.vector(rq[-1, -1])
+n_r <- length(v)
+c(mean = mean(v), sd = sd(v), n = n_r)
+tol_m <- 4 / sqrt(n_r); tol_s <- 4 / sqrt(2 * n_r)
+check("residuals", "resíduos quantílicos (ajuste bem especificado): média ≈ 0",
+      abs(mean(v)) < tol_m, sprintf("0 +/- %.3f", tol_m), mean(v))
+check("residuals", "resíduos quantílicos (ajuste bem especificado): dp ≈ 1",
+      abs(sd(v) - 1) < tol_s, sprintf("1 +/- %.3f", tol_s), sd(v))
+
+tm("karma2d_diagnostics", dg <- karma2d_diagnostics(fit))
+dg
+out_dg <- capture.output(print(dg))
+check("karma2d_diagnostics", "objeto imprime e a média coincide com os resíduos",
+      inherits(dg, "karma2d_diagnostics") && length(out_dg) > 5 &&
+        abs(dg$residual_moments[["mean"]] - mean(v)) < 1e-12,
+      mean(v), c(length(out_dg), dg$residual_moments[["mean"]]))
+```
+
+As tolerâncias são de quatro erros-padrão sob normalidade padrão:
+$4/\sqrt{n}$ para a média e $4/\sqrt{2n}$ para o desvio-padrão, com
+$n = `r n_r`$ pixels da região efetiva.
+
+## 8. Detecção de anomalias
+
+`karma2d_detect_anomalies()` compara os resíduos quantílicos com limites de
+controle e pós-processa o mapa binário com morfologia matemática
+(`karma2d_structuring_element()`, `morph_erode()`, `morph_dilate()`,
+`morph_open()`, `morph_close()`). Usamos a imagem KARMA(1,0) 40 x 40 da
+Seção 3, ajustada no bloco inferior direito 20 x 20 (`fit_q` acima), e
+injetamos uma anomalia 6 x 8 de valor 0.2.
+
+```{r anomaly}
+y_anom <- y_ar
+y_anom[5:10, 5:12] <- 0.2
+truth_mask <- matrix(FALSE, 40, 40); truth_mask[5:10, 5:12] <- TRUE
+r_anom <- karma2d_residuals(fit_q, newdata = y_anom, padding = "duplicate")
+tm("karma2d_structuring_element", se3 <- karma2d_structuring_element(3, 3))
+check("karma2d_structuring_element", "elemento 3 x 3 só com TRUE",
+      identical(dim(se3), c(3L, 3L)) && all(se3), "3 x 3, 9 TRUE",
+      c(dim(se3), sum(se3)))
+tm("karma2d_detect_anomalies", det <- karma2d_detect_anomalies(r_anom, limit = 3))
+det
+recall <- sum(det$detected_mask & truth_mask) / sum(truth_mask)
+# "far" = Chebyshev distance greater than 2 pixels from the anomaly
+near <- matrix(FALSE, 40, 40); near[3:12, 3:14] <- TRUE
+far_hits <- sum(det$detected_mask & !near)
+check("karma2d_detect_anomalies", "recall da anomalia 6 x 8", recall >= 0.5,
+      ">= 0.5", recall)
+check("karma2d_detect_anomalies",
+      "nenhuma detecção a mais de 2 pixels da anomalia", far_hits == 0, 0,
+      far_hits)
+
+tm("karma2d_detect_anomalies", det_asym <- karma2d_detect_anomalies(
+  r_anom, limit = c(-2, 3), morphology = "none"))
+det_asym
+hand_mask <- r_anom < -2 | r_anom > 3
+check("karma2d_detect_anomalies",
+      "limit = c(-2, 3) e morphology = 'none' = limiar calculado à mão",
+      identical(det_asym$limits, c(-2, 3)) &&
+        identical(det_asym$detected_mask, hand_mask) &&
+        identical(det_asym$threshold_mask, hand_mask),
+      sum(hand_mask), sum(det_asym$detected_mask))
+
+thr <- det$threshold_mask
+tm("morph_erode", er <- morph_erode(thr, se3))
+tm("morph_dilate", di <- morph_dilate(er, se3))
+tm("morph_open", op <- morph_open(thr, se3))
+tm("morph_close", cl <- morph_close(thr, se3))
+check("morph_open, morph_erode, morph_dilate", "morph_open = morph_dilate(morph_erode(.)) = morphology 'opening'",
+      identical(op, di) && identical(op, det$detected_mask), TRUE,
+      identical(op, di) && identical(op, det$detected_mask))
+det_close <- karma2d_detect_anomalies(r_anom, morphology = "closing")
+check("morph_close", "morph_close = morph_erode(morph_dilate(.)) = morphology 'closing'",
+      identical(cl, morph_erode(morph_dilate(thr, se3), se3)) &&
+        identical(cl, det_close$detected_mask), TRUE,
+      identical(cl, det_close$detected_mask))
+
+# Post-processing used in the authors' NDVI scripts: opening then closing
+oc <- morph_close(morph_open(thr, se3), se3)
+c(threshold = sum(thr), opening = sum(op), closing = sum(cl),
+  open_then_close = sum(oc))
+check("morph_close", "abertura + fechamento: recall >= 0.5 e nada longe da anomalia",
+      sum(oc & truth_mask) / sum(truth_mask) >= 0.5 && sum(oc & !near) == 0,
+      ">= 0.5; 0", c(sum(oc & truth_mask) / sum(truth_mask), sum(oc & !near)))
+```
+
+```{r anomaly-plot}
+op_ <- par(mfrow = c(1, 3), mar = c(1, 1, 2, 1))
+show_img(y_anom, "Imagem com anomalia")
+show_mask(thr, "Limiar |r| > 3")
+show_mask(oc, "Abertura + fechamento 3 x 3")
+par(op_)
+```
+
+## 9. Métricas
+
+`karma2d_metrics()` calcula MAE, MSE, SMAPE (em %) e RMSLE entre imagem
+observada e predita.
+
+```{r metrics}
+obs <- c(0.2, 0.5, 0.9); pred <- c(0.25, 0.45, 0.8)
+tm("karma2d_metrics", mt <- karma2d_metrics(obs, pred))
+mt
+hand <- c(MAE = mean(abs(obs - pred)), MSE = mean((obs - pred)^2),
+          SMAPE = 100 * mean(2 * abs(obs - pred) / (abs(obs) + abs(pred))),
+          RMSLE = sqrt(mean((log(1 + obs) - log(1 + pred))^2)))
+hand
+d_mt <- max(abs(unname(mt) - unname(hand)))
+check("karma2d_metrics", "MAE/MSE/SMAPE/RMSLE calculados à mão = função",
+      d_mt < 1e-12 && attr(mt, "n") == 3, "< 1e-12, n = 3",
+      c(d_mt, attr(mt, "n")))
+```
+
+## 10. Caso real 1 — NDVI (`ndvi_paraiba`)
+
+Seguimos exatamente o procedimento do artigo (Seção 4.2.1): reescala
+$(x+1)/2$, janela de calibração (Fase I) `[51:100, 51:100]`, ajuste
+KARMA(1,0), anomalia sintética `[5:20, 15:30] <- 0.01`, predição na cena
+completa sem *padding*, remoção das primeiras $2w = 2$ linhas e colunas,
+resíduos quantílicos, limiar 3 e abertura seguida de fechamento com elemento
+3 x 3.
+
+```{r ndvi}
+y <- (ndvi_paraiba + 1) / 2
+y_train <- y[51:100, 51:100]
+tm("karma2d_fit", fit_ndvi <- karma2d_fit(y_train, order = c(1, 0)))
+summary(fit_ndvi)
+
+table4 <- c(alpha = 0.6609, `phi(0,1)` = 0.2819, `phi(1,0)` = 0.1897,
+            `phi(1,1)` = 0.1653, shape = 19.6065)
+est4 <- round(coef(fit_ndvi), 4)
+dev4 <- abs(est4 - table4)
+rbind(article = table4, package = est4)
+check("karma2d_fit", "NDVI: estimativas = Tabela 4 (tolerância 1e-4)",
+      all(dev4 <= 1e-4 + 1e-12), table4, est4)
+check("karma2d_fit", "NDVI: convergência 0 e inferência 'ok'",
+      fit_ndvi$convergence == 0 && fit_ndvi$inference$status == "ok",
+      "0, ok", c(fit_ndvi$convergence, fit_ndvi$inference$status))
+
+y_anom <- y
+y_anom[5:20, 15:30] <- 0.01
+w <- 1
+crop <- function(m) m[-seq_len(2 * w), -seq_len(2 * w), drop = FALSE]
+tm("predict", pred_full <- predict(fit_ndvi, newdata = y_anom, padding = "none"))
+y_crop <- crop(y_anom); pred_crop <- crop(pred_full)
+
+table5_cal <- c(MAE = 0.0291, MSE = 0.0018, SMAPE = 3.4711, RMSLE = 0.0236)
+table5_full <- c(MAE = 0.0305, MSE = 0.0037, SMAPE = 7.6934, RMSLE = 0.0407)
+m_cal <- karma2d_metrics(y_train[2:50, 2:50], fitted(fit_ndvi)[2:50, 2:50])
+m_full <- karma2d_metrics(y_crop, pred_crop)
+rbind(calib_article = table5_cal, calib_package = round(m_cal, 4),
+      full_article = table5_full, full_package = round(m_full, 4))
+check("karma2d_metrics", "NDVI: área de calibração = Tabela 5 (4 casas)",
+      all(round(unname(m_cal), 4) == unname(table5_cal)), table5_cal,
+      round(m_cal, 4))
+check("karma2d_metrics", "NDVI: cena completa recortada = Tabela 5 (4 casas)",
+      all(round(unname(m_full), 4) == unname(table5_full)), table5_full,
+      round(m_full, 4))
+
+tm("karma2d_residuals", r_full <- crop(karma2d_residuals(
+  fit_ndvi, newdata = y_anom, padding = "none")))
+det_ndvi <- karma2d_detect_anomalies(r_full, limit = 3, morphology = "none")
+mask_ndvi <- morph_close(morph_open(det_ndvi$threshold_mask, se3), se3)
+truth_ndvi <- matrix(FALSE, nrow(r_full), ncol(r_full))
+truth_ndvi[3:18, 13:28] <- TRUE
+rec_ndvi <- sum(mask_ndvi & truth_ndvi) / sum(truth_ndvi)
+c(flagged = sum(det_ndvi$threshold_mask), detected = sum(mask_ndvi),
+  true_pos = sum(mask_ndvi & truth_ndvi),
+  false_pos = sum(mask_ndvi & !truth_ndvi), recall = rec_ndvi)
+# Where are the false positives? Count those within 1 pixel of the rectangle
+ring_ndvi <- matrix(FALSE, nrow(r_full), ncol(r_full))
+ring_ndvi[2:19, 12:29] <- TRUE
+c(false_pos_adjacent = sum(mask_ndvi & !truth_ndvi & ring_ndvi),
+  false_pos_elsewhere = sum(mask_ndvi & !ring_ndvi))
+check("karma2d_detect_anomalies", "NDVI: recall no retângulo da anomalia [3:18, 13:28]",
+      rec_ndvi == 1, 1, rec_ndvi)
+```
+
+```{r ndvi-plot}
+op_ <- par(mfrow = c(1, 3), mar = c(1, 1, 2, 1))
+show_img(pred_crop, "Predição (cena recortada)")
+show_img(pmin(pmax(r_full, -6), 6), "Resíduos quantílicos (truncados)",
+         col = hcl.colors(64, "Blue-Red 3"), zlim = c(-6, 6))
+show_mask(mask_ndvi, "Detecção (abertura + fechamento)")
+par(op_)
+```
+
+Os resíduos estão truncados em $\pm 6$ apenas na figura. Os falsos
+positivos contados acima ficam (ver `false_pos_adjacent`/`false_pos_elsewhere`)
+na faixa de um pixel ao redor do retângulo: como o modelo é autorregressivo,
+os pixels logo abaixo e à direita da anomalia são preditos a partir dos
+valores anômalos e também geram resíduos extremos. O artigo só reporta o
+recall sobre a anomalia.
+
+## 11. Caso real 2 — GRDI (teste funcional, NÃO reprodução)
+
+**Esta seção não reproduz as Tabelas 6-7 do artigo.** O arquivo
+`analysis/data/grdi/nasa_corte_india.csv` é uma extração de
+`nasa_corte_india_expandido.csv` (o arquivo que o artigo usou), mas uma busca
+exaustiva em todas as 362.604 janelas 100 x 100 possíveis não encontrou a
+janela do artigo (o melhor candidato fica a 4 erros-padrão publicados de
+distância). Aqui testamos apenas que o fluxo de trabalho roda sobre dados
+GRDI reais. Usamos a janela das linhas 246:345 e colunas 674:773. O valor
+0.01 no arquivo (0.0001 após a divisão por 100) é um código de
+preenchimento/ausência (cerca de 24% das células, pixels isolados dentro de
+áreas válidas) e é substituído pela média dos pixels válidos da janela,
+como os scripts originais faziam com `NA`.
+
+```{r grdi}
+raw <- as.matrix(read.csv(file.path("..", "analysis", "data", "grdi",
+                                    "nasa_corte_india.csv")))
+dim(raw)
+c(fill_fraction_file = mean(raw == 0.01))
+g <- raw[246:345, 674:773] / 100
+fill <- g == 0.01 / 100
+c(fill_in_window = sum(fill), fraction = mean(fill))
+g[fill] <- mean(g[!fill])
+range(g)
+g_train <- g[51:100, 51:100]
+tm("karma2d_fit", fit_g <- karma2d_fit(g_train, order = c(0, 1)))
+summary(fit_g)
+check("karma2d_fit", "GRDI: convergência 0", fit_g$convergence == 0, 0,
+      fit_g$convergence)
+check("karma2d_fit", "GRDI: status da inferência 'ok'",
+      fit_g$inference$status == "ok", "ok", fit_g$inference$status)
+sd_g <- sd(residuals(fit_g), na.rm = TRUE)
+check("residuals", "GRDI: dp dos resíduos na Fase I em [0.7, 1.3]",
+      sd_g >= 0.7 && sd_g <= 1.3, "[0.7, 1.3]", sd_g)
+
+g_anom <- g
+g_anom[19:23, 41:50] <- 0.1
+w <- max(fit_g$order)
+pred_g <- crop(predict(fit_g, newdata = g_anom, padding = "none"))
+g_crop <- crop(g_anom)
+r_g <- crop(karma2d_residuals(fit_g, newdata = g_anom, padding = "none"))
+se35 <- karma2d_structuring_element(3, 5)
+det_g <- karma2d_detect_anomalies(r_g, limit = 3, structuring_element = se35,
+                                  morphology = "none")
+mask_g <- morph_close(morph_open(det_g$threshold_mask, se35), se35)
+truth_g <- matrix(FALSE, 100, 100); truth_g[19:23, 41:50] <- TRUE
+truth_g <- crop(truth_g)
+rec_g <- sum(mask_g & truth_g) / sum(truth_g)
+rbind(calibration = karma2d_metrics(g_train[2:50, 2:50],
+                                    fitted(fit_g)[2:50, 2:50]),
+      full_scene = karma2d_metrics(g_crop, pred_g))
+c(flagged = sum(det_g$threshold_mask), detected = sum(mask_g),
+  true_pos = sum(mask_g & truth_g), false_pos = sum(mask_g & !truth_g),
+  recall = rec_g)
+check("karma2d_detect_anomalies", "GRDI: recall é um número válido em [0, 1] (só registrado)",
+      is.finite(rec_g) && rec_g >= 0 && rec_g <= 1, "[0, 1]", rec_g)
+```
+
+```{r grdi-plot}
+op_ <- par(mfrow = c(1, 3), mar = c(1, 1, 2, 1))
+show_img(g_crop, "GRDI com anomalia (recortado)")
+show_img(pmin(pmax(r_g, -6), 6), "Resíduos quantílicos (truncados)", col = hcl.colors(64, "Blue-Red 3"),
+         zlim = c(-6, 6))
+show_mask(mask_g, "Detecção (3 x 5)")
+par(op_)
+```
+
+## Resumo
+
+```{r summary-table}
+knitr::kable(checks, digits = 3, row.names = TRUE,
+             col.names = c("Função", "Verificação", "Esperado", "Observado",
+                           "Status", "Segundos"))
+```
+
+Resumo por função (número de verificações, número OK e tempo total das
+chamadas cronometradas de cada função):
+
+```{r summary-fun}
+split_fun <- function(f) trimws(strsplit(f, ",")[[1]])
+long <- do.call(rbind, lapply(seq_len(nrow(checks)), function(i) {
+  data.frame(fun = split_fun(checks$fun[i]), status = checks$status[i])
+}))
+per_fun <- data.frame(fun = sort(unique(long$fun)))
+per_fun$checks <- as.integer(table(long$fun)[per_fun$fun])
+per_fun$ok <- as.integer(tapply(long$status == "OK", long$fun, sum)[per_fun$fun])
+time_fun <- aggregate(seconds ~ fun, data = timings, FUN = sum)
+per_fun <- merge(per_fun, time_fun, all.x = TRUE)
+per_fun$seconds[is.na(per_fun$seconds)] <- 0
+knitr::kable(per_fun, digits = 3,
+             col.names = c("Função", "Verificações", "OK", "Tempo total (s)"))
+n_fail <- sum(checks$status == "FAIL")
+c(checks = nrow(checks), ok = sum(checks$status == "OK"), fail = n_fail)
+```
+
+```{r render-time}
+render_seconds <- proc.time()[["elapsed"]] - render_start
+```
+
+Tempo total de renderização (até este ponto):
+**`r sprintf("%.1f", render_seconds)` segundos**.
+
+`r if (n_fail == 0) "**Nenhuma verificação falhou.**" else paste0("**Verificações com FAIL:** ", paste(sprintf("%s — %s (esperado %s, observado %s)", checks$fun[checks$status == "FAIL"], checks$what[checks$status == "FAIL"], checks$expected[checks$status == "FAIL"], checks$observed[checks$status == "FAIL"]), collapse = "; "), ".")`
+
+### Funções não cobertas
+
+Funções exportadas em `NAMESPACE` que não aparecem em nenhuma verificação
+(calculado com `getNamespaceExports("karma2d")`):
+
+```{r uncovered}
+exported <- sort(getNamespaceExports("karma2d"))
+covered <- unique(long$fun)
+uncovered <- setdiff(exported, covered)
+length(exported)
+if (length(uncovered) == 0) "nenhuma" else uncovered
+```
