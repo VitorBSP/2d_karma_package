@@ -14,7 +14,7 @@ Run everything from the repository root after installing the package
 | Monte Carlo, article configuration (10,000 replications, sizes 10, 25, 50) | `Rscript analysis/simulations/run_monte_carlo.R --mode=full --cores=8` | same; resumable per cell |
 | Monte Carlo summary and comparison with Tables 1-3 | `Rscript analysis/simulations/summarize_monte_carlo.R` | `summary.csv`, `comparison-with-paper.csv` |
 | NDVI application (Tables 4-5, Figures 4-7) | `Rscript analysis/ndvi/run_ndvi.R` | `analysis/output/ndvi/` |
-| GRDI application (Tables 6-7, Figures 8-10) | `Rscript analysis/grdi/run_grdi.R --input=PATH/nasa_corte_india_expandido.csv` | `analysis/output/grdi/`; the input file is not in the repository |
+| GRDI application (Tables 6-7, Figures 8-10) | `Rscript analysis/grdi/run_grdi.R --input=PATH/nasa_corte_india_expandido.csv` | `analysis/output/grdi/`; the input file is on Hugging Face, see `docs/data-provenance.md` |
 | Validate that the pipelines still give the results already obtained, and compare with the article | `Rscript analysis/validate_results.R` | `analysis/output/validation/validation-report.csv`; exit status 1 on any unexpected difference |
 
 ### NDVI procedure

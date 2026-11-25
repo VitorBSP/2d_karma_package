@@ -36,46 +36,76 @@ the original scripts give identical matrices.
 | URL | https://sedac.ciesin.columbia.edu/data/set/povmap-grdi-v1 (now distributed through NASA Earthdata) |
 | Licence | Creative Commons Attribution 4.0 (CC BY 4.0) according to SEDAC; to be confirmed for the exact version used |
 | File in the repository | `nasa_corte_india.csv`: 500 rows x 1001 columns (header `V1..V1001`), values 0.01-89.29, no missing values, 24 % of the cells exactly 0.01 (meaning *unknown*, possibly a fill value); SHA-256 `abfcf86e383b2b037714a4a306f09d1823fee47241bd3208abb6c590b8063fe6`. It is **not read by any original script**. |
-| File used by the article | `nasa_corte_india_expandido.csv`, **not in the repository** (git-ignored), nor is the source raster `povmap-grdi-v1.tif`. Its crop extent, CRS and resolution were not recorded. |
+| File used by the article | `nasa_corte_india_expandido.csv`, **not in the repository** (122 MB). Published by the authors on 2026-11-25 in the private Hugging Face dataset `VitorBSP/nasa_corte_india_expandido` (https://huggingface.co/datasets/VitorBSP/nasa_corte_india_expandido); SHA-256 `96e53f58a27cbbff874fed6caa2c70f4bde13c882f99fb5a37691234659b6458`. 4,501 rows x 5,001 columns (header `V1..V5001`), 82.6 % missing (`NA`), values 3.7-99.8. CRS and resolution of the source raster still not recorded. |
+| Relation between the two files | The committed extraction is exactly `expandido[1501:2001, 2501:3501]` with `NA` written as 0.01 (all cells agree). |
 | Transformations in the original scripts | rows 1200:1300, columns 2200:2300 of the data matrix, first 100 x 100 block, divided by 100, missing values replaced by the mean; Phase I `[51:100, 51:100]`; synthetic anomaly `[19:23, 41:50] <- 0.1` |
 
-**Search for the article's window (2026-11-25).** The authors confirmed that
-`nasa_corte_india.csv` is an extraction of `nasa_corte_india_expandido.csv`
-(the copy they sent is byte-identical to the committed one). Its 0.01 values
-are scattered over the whole image, including 13,395 isolated pixels
-surrounded by valid values near 70, so they are treated as missing codes; the
-original scripts replaced missing values by the window mean. Every one of the
-362,604 possible 100 x 100 windows was preprocessed exactly as in the
-original scripts and screened by the statistics implied by Table 6 (Phase I
-mean 0.742, standard deviation 0.0865, spatial autocorrelations 0.380, 0.347,
-0.187); the 120 best candidates were fitted with both models. The closest one
-(top-left cell row 246, column 680) is still about 4 published standard
-errors away from the Table 6 estimates, while the article's own window would
-match exactly. **The article's window is not in this extraction.** The search
-is reproducible with `Rscript analysis/grdi/search_article_window.R` (about
-40 s).
+**Reproduction with the expanded file (2026-11-25).** Download (the dataset
+is private; a read token is needed):
 
-The functional test below uses the neighbouring window at (246, 674), the
-best one by the mean/standard deviation screen.
+```
+curl -L -H "Authorization: Bearer $HF_TOKEN" -o nasa_corte_india_expandido.csv \
+  https://huggingface.co/datasets/VitorBSP/nasa_corte_india_expandido/resolve/main/nasa_corte_india_expandido.csv
+sha256sum nasa_corte_india_expandido.csv   # 96e53f58...b6458
+Rscript analysis/grdi/run_grdi.R --input=nasa_corte_india_expandido.csv
+```
 
-The pipeline can still run on real GRDI data as a functional test:
+The window of the original scripts (rows 1200:1299, columns 2200:2299, 42
+missing cells, 7 of them in the Phase I block) gives estimates close to, but
+not equal to, Table 6:
+
+| Parameter | KARMA(0,1) computed | Table 6 | Gaussian computed | Table 6 |
+|---|---|---|---|---|
+| alpha | 1.1341 | 1.1114 | 0.7466 | 0.7420 |
+| theta(0,1) | 0.3452 | 0.3467 | 0.4447 | 0.4329 |
+| theta(1,0) | 0.2947 | 0.2819 | 0.3985 | 0.3709 |
+| theta(1,1) | 0.2136 | 0.1848 | 0.2858 | 0.2606 |
+| shape / sigma | 11.833 | 12.3857 | 0.0754 | 0.0733 |
+
+The largest deviation is 2.5 published standard errors (KARMA theta(1,1)).
+Checked and ruled out as causes:
+
+* **Window.** `analysis/grdi/search_article_window.R --input=... --missing_value=`
+  tries every 100 x 100 window with at least half of its cells valid (4.1
+  million). The original window is the closest to Table 6 in the whole file;
+  the next best is 4.7 standard errors away.
+* **Missing-value treatment.** Window mean (the original scripts), Phase I
+  mean or whole-image mean change the estimates by less than 0.5 standard
+  errors; the 0.01 code of the extraction moves them by 20.
+* **Off-by-one cropping.** A 101 x 101 crop and a shifted Phase I give the
+  same distance.
+
+The most likely explanation is that the published file is not exactly the
+version analysed for the article (for example, a later export of the
+raster). Only the authors can confirm this.
+
+Table 7 with the article's procedure (calibration area):
+
+| Model | MAE | MSE | SMAPE | RMSLE |
+|---|---|---|---|---|
+| 2-D KARMA(0,1) | 0.0594 (0.0557) | 0.0060 (0.0056) | 8.45 (7.98) | 0.0466 (0.0456) |
+| Gaussian, as published | 0.0806 (0.0769) | 0.0116 (0.0106) | 11.37 (10.92) | 0.0645 (0.0620) |
+| Gaussian, corrected | 0.0598 | 0.0057 | 8.47 | 0.0451 |
+
+(Values in parentheses: Table 7 of the article.) The Gaussian "as published"
+variant, with the two defects found in the NDVI scripts, lands close to the
+article's Gaussian rows, and the corrected benchmark lands next to KARMA.
+This supports, but does not prove, that Tables 6-7 have the same defects.
+With the corrected benchmark the two models predict equally well on GRDI;
+in detection (3 x 5 element), KARMA has recall 1.00 and precision 0.93, the
+corrected Gaussian recall 0.72 and precision 1.00, and the Gaussian "as
+published" detects nothing.
+
+**Earlier search in the extraction.** Before the expanded file was
+available, the same search on the committed extraction found no window
+closer than 4 standard errors (`Rscript analysis/grdi/search_article_window.R`),
+consistent with the extraction not containing rows 1200:1299. The pipeline
+also runs on the extraction as a functional test:
 
 ```
 Rscript analysis/grdi/run_grdi.R --input=analysis/data/grdi/nasa_corte_india.csv \
   --window=246,674 --missing_value=0.01
 ```
-
-On that window the pattern of the NDVI application repeats: the Gaussian
-benchmark "as published" (with the two defects described in
-`docs/validation-authors-code.md`) has calibration MAE 0.065 and detects
-nothing, while the corrected Gaussian benchmark has MAE 0.050 (KARMA 0.048)
-and recall 0.92 (KARMA 1.00). This suggests, but does not prove, that Tables
-6-7 have the same defects.
-
-To make the GRDI application reproducible, the authors should publish the
-CSV used (licence permitting, with attribution) or a script that derives it
-from the official raster, stating the GRDI version, download date and crop
-extent.
 
 ## Distribution policy
 

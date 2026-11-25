@@ -116,7 +116,10 @@ repository (excluded from the package build). In summary:
   link). Corrected, the KARMA gain in the calibration area is about 4 %, not
   54 %, and the Gaussian model also detects the injected anomaly (recall 0.98
   against 1.00 for KARMA).
-- **GRDI:** not reproducible, because the input data are not in the repository.
+- **GRDI:** the input file is now on Hugging Face and the pipeline runs on the
+  article's window, but the estimates are up to 2.5 standard errors from Table
+  6, probably because the published file is not exactly the version analysed.
+  The Gaussian defects show the same pattern as in the NDVI application.
 - **Monte Carlo study:** Tables 1-3 come from the authors' scripts, whose
   simulator, likelihood and score agree with the package. A 1,000-replication
   run of the pipeline agrees with the tables; the 10,000-replication run has

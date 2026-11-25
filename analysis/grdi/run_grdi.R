@@ -12,15 +12,16 @@
 #     --window=246,674 --missing_value=0.01
 #
 # DATA AVAILABILITY. The original scripts read
-# `grdi/data/nasa_corte_india_expandido.csv`, a CSV export of a crop of the
-# Global Gridded Relative Deprivation Index (GRDI) v1 raster
-# (povmap-grdi-v1.tif, NASA SEDAC/CIESIN). Neither that CSV nor the raster
-# was committed to the repository (both were listed in .gitignore), and the
-# crop extent used to create the CSV was not recorded. The CSV that IS in
-# the repository (analysis/data/grdi/nasa_corte_india.csv, 501 x 1001) is
-# not read by any original script and is too small for the window used
-# below. Therefore this pipeline cannot reproduce the article until the
-# expanded CSV is supplied; see docs/data-provenance.md.
+# `grdi/data/nasa_corte_india_expandido.csv` (4,501 x 5,001 cells, 122 MB),
+# a CSV export of a crop of the Global Gridded Relative Deprivation Index
+# (GRDI) v1 raster. It is not in the repository; the authors published it in
+# the private Hugging Face dataset VitorBSP/nasa_corte_india_expandido
+# (SHA-256 96e53f58...b6458; download command in docs/data-provenance.md).
+# The committed analysis/data/grdi/nasa_corte_india.csv is its block
+# [1501:2001, 2501:3501] with missing values written as 0.01; it does not
+# contain the article's window. With the published file the estimates are
+# within 2.5 standard errors of Table 6 but not equal (see
+# docs/data-provenance.md).
 #
 # Steps (as in the original scripts, analysis/legacy/grdi/*_v2.R):
 #   1. Read the CSV (header row = column names), take rows 1200:1300 and

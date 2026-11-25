@@ -1,37 +1,47 @@
-# Search the committed GRDI extraction for the window used in the article.
+# Search a GRDI matrix for the window used in the article.
 #
 # Usage (from the repository root, after installing karma2d):
 #   Rscript analysis/grdi/search_article_window.R [--cores=3]
+#   Rscript analysis/grdi/search_article_window.R \
+#     --input=PATH/nasa_corte_india_expandido.csv --missing_value=
 #
-# The authors state that analysis/data/grdi/nasa_corte_india.csv is an
-# extraction of nasa_corte_india_expandido.csv, the file read by the original
-# GRDI scripts (window raw[1200:1300, 2200:2300][1:100, 1:100]). The offset of
-# the extraction is unknown, so every 100 x 100 window is tried:
+# Default input: analysis/data/grdi/nasa_corte_india.csv, an extraction of
+# nasa_corte_india_expandido.csv (rows 1501:2001, columns 2501:3501, missing
+# values written as 0.01). The original GRDI scripts used the window
+# raw[1200:1300, 2200:2300][1:100, 1:100] of the expanded file. Every
+# 100 x 100 window with at least half of its cells valid is tried:
 #   1. Preprocess as the original scripts: divide by 100 and replace missing
-#      values (coded 0.01 in this file) by the mean of the window.
+#      values (NA, or --missing_value) by the mean of the window.
 #   2. Screen all windows by the statistics of the Phase I block
 #      [51:100, 51:100] implied by Table 6: mean 0.742 (Gaussian intercept)
 #      and standard deviation 0.0733 * sqrt(1 + sum(theta^2)) = 0.0865.
 #   3. Rank the survivors by the spatial autocorrelations implied by the
 #      published Gaussian MA(1): 0.380, 0.347, 0.187 at lags (0,1), (1,0),
 #      (1,1).
-#   4. Fit the Gaussian ARMA(0,1) and 2-D KARMA(0,1) to the 120 best
-#      candidates and measure the distance to Table 6 in published standard
-#      errors. The article's window would give a distance near zero.
+##   4. Fit the Gaussian ARMA(0,1) and 2-D KARMA(0,1) to the 120 best
+#      candidates and to the original window (1200, 2200) when it exists, and
+#      measure the distance to Table 6 in published standard errors. The
+#      article's window, with the article's data, would give about zero.
 
 if (!file.exists("analysis/R/common.R")) {
   stop("Run this script from the repository root.")
 }
 source(file.path("analysis", "R", "common.R"))
 source(file.path("analysis", "R", "gaussian_arma2d.R"))
-opts <- parse_args(list(cores = "3"))
+opts <- parse_args(list(cores = "3",
+                        input = file.path("analysis", "data", "grdi",
+                                          "nasa_corte_india.csv"),
+                        missing_value = "0.01"))
 
-raw <- as.matrix(utils::read.csv(file.path("analysis", "data", "grdi",
-                                           "nasa_corte_india.csv"),
-                                 check.names = FALSE))
+raw <- as.matrix(utils::read.csv(opts$input, check.names = FALSE))
 dimnames(raw) <- NULL
-missing <- raw == 0.01
+if (nzchar(opts$missing_value)) {
+  raw[!is.na(raw) & raw == as.numeric(opts$missing_value)] <- NA
+}
+missing <- is.na(raw)
 values <- ifelse(missing, 0, raw / 100)
+cat(sprintf("Input %d x %d, %.1f%% missing\n", nrow(raw), ncol(raw),
+            100 * mean(missing)))
 
 # Sums over all h x h blocks from 2-D cumulative sums: block rows r+1..r+h.
 cumsum2 <- function(a) {
@@ -47,7 +57,11 @@ s2 <- cumsum2(values^2)
 sm <- cumsum2(missing * 1)
 r <- rep(seq_len(nrow(raw) - 99) - 1, ncol(raw) - 99)
 c <- rep(seq_len(ncol(raw) - 99) - 1, each = nrow(raw) - 99)
-fill <- block(s1, r, c, 100) / (1e4 - block(sm, r, c, 100))
+n_miss <- block(sm, r, c, 100)
+valid <- n_miss < 5000
+r <- r[valid]
+c <- c[valid]
+fill <- block(s1, r, c, 100) / (1e4 - n_miss[valid])
 n_fill <- block(sm, r + 50, c + 50, 50)
 sum1 <- block(s1, r + 50, c + 50, 50) + n_fill * fill
 sum2 <- block(s2, r + 50, c + 50, 50) + n_fill * fill^2
@@ -60,10 +74,8 @@ cand <- windows[abs(windows$mean - 0.742) < 0.005 &
 cat("Passing the mean/sd screen:", nrow(cand), "\n")
 
 phase1 <- function(row, col) {
-  w <- raw[row:(row + 99), col:(col + 99)]
-  miss <- w == 0.01
-  w <- w / 100
-  w[miss] <- mean(w[!miss])
+  w <- raw[row:(row + 99), col:(col + 99)] / 100
+  w[is.na(w)] <- mean(w, na.rm = TRUE)
   w[51:100, 51:100]
 }
 acf3 <- function(p) {
@@ -81,6 +93,11 @@ cand$screen_score <- abs(cand$mean - 0.742) / 0.005 +
   abs(cand$sd - 0.0865) / 0.01
 pick <- unique(rbind(head(cand[order(cand$acf_distance), ], 60),
                      head(cand[order(cand$screen_score), ], 60)))
+if (nrow(raw) >= 1299 && ncol(raw) >= 2299) {
+  original <- windows[windows$row == 1200 & windows$col == 2200, ]
+  pick <- unique(rbind(pick, cbind(original, acf_distance = NA,
+                                   screen_score = NA)))
+}
 
 pub_gauss <- c(0.7420, 0.4329, 0.3709, 0.2606, 0.0733)
 se_gauss <- c(0.0030, 0.0166, 0.0178, 0.0190, 0.0011)
@@ -101,5 +118,10 @@ cat("\nBest candidates (distance = largest deviation from Table 6, in",
 print(head(pick[, c("row", "col", "mean", "sd", "gauss_se_units",
                     "karma_se_units", "distance")], 5),
       digits = 3, row.names = FALSE)
+if (any(pick$row == 1200 & pick$col == 2200)) {
+  o <- pick[pick$row == 1200 & pick$col == 2200, ]
+  cat(sprintf("Original window (1200, 2200): Gaussian %.2f, KARMA %.2f SE\n",
+              o$gauss_se_units, o$karma_se_units))
+}
 cat(sprintf(paste0("\nSmallest distance: %.1f standard errors. The article's",
                    " window would give about 0.\n"), pick$distance[1]))

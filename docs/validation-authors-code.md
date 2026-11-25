@@ -211,14 +211,14 @@ Effect on the article's claims:
   correct Gaussian prediction the anomaly is detected almost as well as with
   2-D KARMA.
 
-The GRDI scripts were not in the archives. If they use the same
-`fitting()` and `fit.2dgarma()`, Tables 6-7 and Figure 10 have the same two
-defects; this should be checked by the authors. A functional test on a real
-GRDI window (not the article's, which is not in the available extraction;
-see `docs/data-provenance.md`) shows the same pattern: as published, the
-Gaussian benchmark detects nothing (calibration MAE 0.065); corrected, it
-detects the anomaly with recall 0.92 (MAE 0.050), against 1.00 for KARMA
-(MAE 0.048).
+The GRDI scripts were not in the archives. With the expanded GRDI file
+published later (`docs/data-provenance.md`), the estimates on the article's
+window are within 2.5 standard errors of Table 6 but not equal, so Table 7
+cannot be checked to the printed digit. The same two defects reproduce the
+pattern of the article: the Gaussian "as published" calibration MAE is 0.081
+(article 0.077) while the corrected benchmark gives 0.060, next to KARMA
+(0.059). In detection, KARMA has recall 1.00, the corrected Gaussian 0.72,
+and the "as published" Gaussian detects nothing.
 
 ## 6. Summary for the authors
 

@@ -366,12 +366,14 @@ committed GRDI script also fits KARMA(1,0) (`p = 1; q = 0`), while the article
 reports KARMA(0,1). About 24 % of the values of the committed CSV are exactly
 0.01. This is probably a fill value, but its meaning is undocumented.
 
-*Update (2026-11-25).* The authors sent `nasa_corte_india.csv` as an
-extraction of the expanded file; it is identical to the committed copy. An
-exhaustive search over all 100 x 100 windows found none matching Table 6
-(best: 4 published standard errors away), so the article's window is not in
-it. `run_grdi.R` now accepts `--window` and `--missing_value` and runs on
-this file as a functional test (`docs/data-provenance.md`).
+*Update (2026-11-25).* The authors published the expanded file on Hugging
+Face (`docs/data-provenance.md`). The committed CSV is its block
+`[1501:2001, 2501:3501]`, which explains why no window of it matched. With
+the expanded file the original window is the best match in the whole image,
+but the estimates are still up to 2.5 published standard errors from Table
+6, so the published file is probably not exactly the version analysed. The
+Gaussian "as published" variant lands near the article's Table 7, the
+corrected one next to KARMA, as in the NDVI application.
 
 ### 5.4 Monte Carlo results
 

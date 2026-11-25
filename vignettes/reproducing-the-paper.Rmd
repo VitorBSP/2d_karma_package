@@ -64,10 +64,12 @@ comparison with the published values.
 ## GRDI application (Section 4.2.2)
 
 ```{sh grdi, eval = FALSE}
-Rscript analysis/grdi/run_grdi.R --input=PATH/TO/grdi.csv
+Rscript analysis/grdi/run_grdi.R --input=PATH/nasa_corte_india_expandido.csv
 ```
 
-This requires the GRDI CSV file, which is **not** in the repository.
+The GRDI CSV (122 MB) is not in the repository; the authors distribute it on
+Hugging Face (dataset `VitorBSP/nasa_corte_india_expandido`, access on
+request).
 
 ## Reproduction status
 
@@ -135,8 +137,13 @@ article.
 
 ### GRDI
 
-The GRDI application is **not reproducible from the repository**: the input
-file is missing and the crop extent was not recorded.
+The input file `nasa_corte_india_expandido.csv` is available from the
+authors on Hugging Face (see `docs/data-provenance.md` for the download
+command and checksum). On the article's window the estimates are within 2.5
+standard errors of Table 6 but not equal, and no other window of the file is
+closer, so the published file is probably not exactly the version analysed.
+The Gaussian benchmark "as published" again lands near the article's Table 7
+and the corrected one next to KARMA.
 
 ## Details
 
