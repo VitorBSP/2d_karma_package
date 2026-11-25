@@ -1,0 +1,152 @@
+---
+title: "Reproducing the results of the article"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Reproducing the results of the article}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+The `karma2d` package contains the methods of Pereira, Palm and Bayer (2026).
+The scripts that regenerate the tables and figures of the article live in the
+`analysis/` directory of the **source repository**
+(<https://github.com/VitorBSP/2d_karma_package>). That directory is not part
+of the installed package, because the full Monte Carlo study takes hours and
+should never run during package checks. This vignette gives the exact
+commands and, importantly, an honest summary of what could and could not be
+reproduced. Nothing below is evaluated when the vignette is built.
+
+## Setup
+
+Clone the repository, install the package and run every command **from the
+repository root**:
+
+```{sh setup-commands, eval = FALSE}
+git clone https://github.com/VitorBSP/2d_karma_package
+cd 2d_karma_package
+Rscript -e 'remotes::install_local(".")'
+```
+
+## Monte Carlo study (Section 4.1; Tables 1-3)
+
+```{sh monte-carlo, eval = FALSE}
+# Development / continuous integration: few replications, minutes
+Rscript analysis/simulations/run_monte_carlo.R --mode=quick
+
+# Full study: 10,000 replications per scenario, image sizes 10, 25 and 50
+Rscript analysis/simulations/run_monte_carlo.R --mode=full --cores=8
+
+# Summaries: mean, bias, MSE, skewness, kurtosis and coverage of the
+# estimators, with a comparison against Tables 1-3 of the article
+Rscript analysis/simulations/summarize_monte_carlo.R
+```
+
+The runner saves a checkpoint after each scenario (and image size), so an
+interrupted `--mode=full` run can be resumed by repeating the same command.
+Every replication uses its own random-number stream derived from the master
+seed, so the results do not depend on `--cores`.
+
+## NDVI application (Section 4.2.1; Tables 4-5, Figures 4-7)
+
+```{sh ndvi, eval = FALSE}
+Rscript analysis/ndvi/run_ndvi.R
+```
+
+It uses the `ndvi_paraiba` dataset shipped with the package. It fits the 2-D
+KARMA and the Gaussian 2-D ARMA models on the Phase I window, computes the
+prediction metrics, the anomaly detection results and the figures, and writes a
+comparison with the published values.
+
+## GRDI application (Section 4.2.2)
+
+```{sh grdi, eval = FALSE}
+Rscript analysis/grdi/run_grdi.R --input=PATH/nasa_corte_india_expandido.csv
+```
+
+The GRDI CSV (122 MB) is not in the repository; the authors distribute it on
+Hugging Face (dataset `VitorBSP/nasa_corte_india_expandido`, access on
+request).
+
+## Reproduction status
+
+The following observations were made when re-running the original code and
+the new pipeline. They are reported as found; the causes of the
+discrepancies that remain open are not known.
+
+### Monte Carlo
+
+* Tables 1-3 were produced by the authors' simulation scripts (10,000
+  replications, `set.seed(1)`), which were validated against the package:
+  simulator, likelihood and score agree. The scripts first committed to the
+  repository used other parameter values for KARMA(1,0) and KARMA(0,1) and are
+  kept as the scenario set `--scenario_set=legacy_scripts`.
+* The pipeline uses the article's parameter values and the authors' simulator
+  (`burn_in = max(p, q)`), and computes coverage from the expected
+  information, the observed information and the matrix used by the authors'
+  code.
+* A run with 1,000 replications per cell agrees with the article: all 54
+  means are within three Monte Carlo standard errors, and the MSEs are between
+  0.90 and 1.27 times the published ones. The full 10,000-replication run
+  has not been executed.
+* The coverage of $\phi_{(1,1)}$ and $\theta_{(1,1)}$ in the ARMA model stays
+  near 0.86-0.91 at every image size: their bias decreases at the same rate
+  as their standard error (an edge effect of the conditional likelihood), so
+  Wald intervals for them are too narrow.
+
+### NDVI, Table 4 (estimates and standard errors)
+
+* The estimates of the 2-D KARMA(1,0) and Gaussian 2-D ARMA(0,1) models and
+  their standard errors reproduce the article to within one unit of the last
+  printed decimal, **except the standard error of the shape parameter**.
+* The article's value 0.2855 is reproduced exactly only by the information
+  matrix of the original code, which mixes the **expected** blocks for the
+  $\gamma$ parameters with the **observed** $\varphi\varphi$ entry. The
+  corrected expected information gives 0.356 and the observed information
+  0.315 (see `vignette("model-theory")` for the corrected formulas).
+
+### NDVI, Table 5 (prediction metrics) and detection
+
+The pipeline follows the procedure of the authors' NDVI scripts: synthetic
+anomaly equal to 0.01, calibration metrics from the Phase I fit, recursion
+on the unpadded image with the first $2w$ rows and columns dropped, and
+opening followed by closing with a 3 x 3 box.
+
+* The KARMA rows reproduce to the printed precision.
+* The published Gaussian rows are reproduced only by replicating two defects
+  of the authors' Gaussian script: in the calibration area the prediction is
+  compared with its transpose, and on the full scene the Gaussian
+  coefficients (identity scale) are passed through the logit link. The
+  pipeline reports the corrected benchmark and, separately, the rows "as
+  published".
+* Corrected, the Gaussian calibration MAE is 0.0303 (published 0.0612)
+  against 0.0291 for KARMA, a gain of about 4 % instead of 54 %. On the full
+  scene the corrected Gaussian MAE is 0.0371 against 0.0305 for KARMA.
+* Detection: KARMA has recall 1.00 and precision 0.89. The Gaussian model as
+  published detects nothing; corrected, it has recall 0.98 and precision
+  0.85.
+
+### Model selection
+
+The automated model selection (significance, then parsimony, then MSE)
+selects the 2-D KARMA(1,0) model on the NDVI Phase I window, as in the
+article.
+
+### GRDI
+
+The input file `nasa_corte_india_expandido.csv` is available from the
+authors on Hugging Face (see `docs/data-provenance.md` for the download
+command and checksum). On the article's window the estimates are within 2.5
+standard errors of Table 6 but not equal, and no other window of the file is
+closer, so the published file is probably not exactly the version analysed.
+The Gaussian benchmark "as published" again lands near the article's Table 7
+and the corrected one next to KARMA.
+
+## Details
+
+A detailed account, with the evidence for each statement above, is in
+`docs/technical-audit.md` and `docs/validation-authors-code.md` in the
+source repository.

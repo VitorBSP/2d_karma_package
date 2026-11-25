@@ -1,0 +1,4 @@
+"variant","model","flagged_threshold","flagged_after_post_processing","true_positive","false_positive","recall","precision"
+"KARMA","2-D KARMA(1,0)",372,289,256,33,1,0.885813148788927
+"Gaussian corrected","2-D ARMA(0,1)",418,297,252,45,0.984375,0.848484848484849
+"Gaussian as published","2-D ARMA(0,1) as published",337,0,0,0,0,NA

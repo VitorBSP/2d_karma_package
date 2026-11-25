@@ -1,0 +1,215 @@
+---
+title: "Simulation and inference"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Simulation and inference}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 6,
+                      fig.height = 3.2, fig.align = "center")
+library(karma2d)
+```
+
+This vignette explains how `karma2d_simulate()` generates images, how its
+random-number handling works, how to run a (toy) Monte Carlo study, and how
+the choice and reliability of the information matrix affect inference.
+
+## The simulation scheme
+
+`karma2d_simulate()` draws images from the conditional model on an **extended
+grid** of size $(N + b)\times(M + b)$, where $b$ is the `burn_in`, and
+returns the last $N$ rows and $M$ columns. With $w = \max(p, q)$:
+
+1. The first $w$ rows and columns of the extended grid are initialised with
+   $g(y) = \alpha$ and $e = 0$.
+2. The remaining pixels are generated row by row. For each pixel the linear
+   predictor $\eta[n,m]$ is computed from the already generated neighbours,
+   $\mu[n,m] = g^{-1}(\eta[n,m])$, and the pixel is drawn by the inverse
+   transform $y = Q(u;\mu,\varphi)$ with $u\sim U(0,1)$ (`qkuma()`).
+3. The error $e[n,m] = g(y[n,m]) - \eta[n,m]$ is stored for the MA terms.
+
+The default `burn_in` is $2w$, which reproduces the scheme of the original
+scripts of the article. A longer burn-in reduces the influence of the
+artificial initial values. No claim is made that the simulated process is
+stationary for arbitrary coefficients: if a pixel becomes numerically 0 or 1
+the function stops with an informative error.
+
+```{r simulate}
+y <- karma2d_simulate(30, 30, alpha = 0.3, ar = c(0.3, 0.2, -0.1),
+                      shape = 8, seed = 11)
+dim(y)
+str(attr(y, "karma2d"))
+```
+
+```{r image}
+image(t(y[rev(seq_len(nrow(y))), ]), col = hcl.colors(32, "viridis"),
+      axes = FALSE,
+      main = "KARMA(1,0), 30 x 30")
+```
+
+Images on another support are obtained with `lower` and `upper`; the model is
+fitted with the same arguments:
+
+```{r support}
+y2 <- karma2d_simulate(20, 20, alpha = 0.1, ar = c(0.2, 0.1, 0), shape = 6,
+                       lower = -1, upper = 1, seed = 5)
+range(y2)
+```
+
+### The `seed` argument leaves the global RNG alone
+
+When `seed` is given, the function sets the seed internally and restores the
+caller's random-number state afterwards, so simulating does not change what
+the rest of your script draws.
+
+```{r seed}
+set.seed(123)
+before <- .Random.seed
+a <- karma2d_simulate(15, 15, alpha = 0.2, ar = c(0.2, 0.1, 0.1),
+                      shape = 5, seed = 1)
+identical(.Random.seed, before)   # the global stream is untouched
+b <- karma2d_simulate(15, 15, alpha = 0.2, ar = c(0.2, 0.1, 0.1),
+                      shape = 5, seed = 1)
+identical(a, b)                    # and the result is reproducible
+```
+
+If `seed = NULL` the function uses (and advances) the global generator, so
+`set.seed()` before the call works as usual.
+
+## A toy Monte Carlo study
+
+The code below runs 20 replications of a 20 x 20 KARMA(1, 0) model and
+summarizes mean, bias, mean squared error (MSE) and the empirical coverage of
+95% Wald intervals. **This is only an illustration of the workflow**: 20
+replications are far too few to judge bias or coverage. Full simulation
+studies are described in `vignette("reproducing-the-paper")`.
+
+```{r monte-carlo}
+truth <- c(alpha = 0.3, `phi(0,1)` = 0.3, `phi(1,0)` = 0.2,
+           `phi(1,1)` = -0.1, shape = 8)
+n_rep <- 20
+est <- matrix(NA_real_, n_rep, length(truth),
+              dimnames = list(NULL, names(truth)))
+cover <- est
+for (r in seq_len(n_rep)) {
+  y <- karma2d_simulate(20, 20, alpha = truth[["alpha"]], ar = truth[2:4],
+                        shape = truth[["shape"]], seed = 1000 + r)
+  fit <- karma2d_fit(y, order = c(1, 0))
+  ci <- confint(fit, level = 0.95)
+  est[r, ] <- coef(fit)
+  cover[r, ] <- ci[, 1] <= truth & truth <= ci[, 2]
+}
+summary_table <- data.frame(
+  truth = truth,
+  mean = colMeans(est),
+  bias = colMeans(est) - truth,
+  MSE = colMeans(sweep(est, 2, truth)^2),
+  coverage = colMeans(cover)
+)
+round(summary_table, 4)
+```
+
+With 20 replications the coverage can only take values that are multiples of
+0.05, and its Monte Carlo standard error is around 5 percentage points.
+
+### Parallel streams
+
+For larger studies, use independent random-number streams per worker. The
+`seed` argument of `karma2d_simulate()` takes a single number, so the usual
+approach is one seed per replication; alternatively, use L'Ecuyer-CMRG
+streams from the `parallel` package and simulate with `seed = NULL`. This
+chunk is not evaluated here.
+
+```{r parallel, eval = FALSE}
+library(parallel)
+RNGkind("L'Ecuyer-CMRG")
+set.seed(2024)
+seeds <- vector("list", 100)
+seeds[[1]] <- .Random.seed
+for (i in 2:100) seeds[[i]] <- nextRNGStream(seeds[[i - 1]])
+
+one_rep <- function(i) {
+  assign(".Random.seed", seeds[[i]], envir = globalenv())
+  y <- karma2d_simulate(25, 25, alpha = 0.3, ar = c(0.3, 0.2, -0.1),
+                        shape = 8)          # seed = NULL: uses the stream
+  coef(karma2d_fit(y, order = c(1, 0)))
+}
+res <- mclapply(seq_along(seeds), one_rep, mc.cores = 4)
+```
+
+## Expected versus observed information
+
+Standard errors come from the inverse of an information matrix evaluated at
+the estimates. `karma2d_control(information = )` selects which one:
+
+* `"expected"` (default): the conditional Fisher information, in closed form
+  (see `vignette("model-theory")`).
+* `"observed"`: minus the Hessian of the log-likelihood, obtained by central
+  differences of the analytic score.
+
+```{r information}
+y <- karma2d_simulate(30, 30, alpha = 0.3, ar = c(0.3, 0.2, -0.1),
+                      shape = 8, seed = 11)
+fit_e <- karma2d_fit(y, c(1, 0))
+fit_o <- karma2d_fit(y, c(1, 0),
+                     control = karma2d_control(information = "observed"))
+all.equal(coef(fit_e), coef(fit_o))   # same point estimates
+rbind(expected = sqrt(diag(vcov(fit_e))),
+      observed = sqrt(diag(vcov(fit_o))))
+```
+
+The point estimates are identical; only the standard errors, Wald tests and
+confidence intervals differ. Both are asymptotic approximations; on small
+images they may differ noticeably, in particular for the shape parameter. The
+information of any fit can be recomputed afterwards with
+`karma2d_fisher(fit, type = "observed")`.
+
+## When the information matrix is not usable
+
+The covariance matrix is only computed when the information matrix is
+numerically positive definite. The package **never regularises** it
+silently: if the matrix is not positive definite, `vcov()` is filled with
+`NA`, a warning is emitted and the reason is stored in `fit$inference`.
+If it is positive definite but nearly singular, the covariance is computed but
+flagged `"ill-conditioned"` with a warning.
+
+The following very small, almost constant image (so that the parameters are
+barely identifiable) illustrates the second situation:
+
+```{r ill-conditioned}
+set.seed(1)
+y_flat <- matrix(runif(64, 0.45, 0.55), 8, 8)
+fit_bad <- withCallingHandlers(
+  karma2d_fit(y_flat, order = c(1, 1)),
+  warning = function(w) {
+    message("Warning captured: ", conditionMessage(w))
+    invokeRestart("muffleWarning")
+  }
+)
+fit_bad$inference$status
+```
+
+The helper that implements the rule can be applied directly to any matrix; for
+a matrix that is not positive definite the covariance is `NA`:
+
+```{r non-pd}
+not_pd <- matrix(c(1, 2, 2, 1), 2)     # eigenvalues 3 and -1
+res <- withCallingHandlers(
+  karma2d:::covariance_from_information(not_pd),
+  warning = function(w) {
+    message("Warning captured: ", conditionMessage(w))
+    invokeRestart("muffleWarning")
+  }
+)
+res$status
+res$vcov
+```
+
+`summary()` repeats the warning and states that Wald inference should not be
+trusted. In practice, a non-positive-definite information matrix usually
+points to an over-parametrised model for the image size, a poorly converged
+fit (check `fit$convergence` and the BFGS message in
+`karma2d_diagnostics(fit)`), or an image with almost no variability.
