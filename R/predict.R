@@ -52,7 +52,11 @@ karma2d_filter_eta <- function(z, par, order, link_obj, padding) {
 #'   the recursion runs on the extended image and the full \eqn{N \times M}
 #'   prediction is returned. This is the border strategy of Section 3.1 of
 #'   the article (called "mirror padding" there, although rows and columns
-#'   are copied without reversal).
+#'   are copied without reversal). With a moving average part the padding
+#'   also changes interior predictions, because the errors of the border are
+#'   then computed instead of set to zero; for a pure AR model only the
+#'   border changes. The authors' scripts that produced the article's
+#'   results used `"none"` and dropped the first \eqn{2w} rows and columns.
 #' @param ... Unused.
 #' @return A matrix with the dimension of `newdata`.
 #' @examples

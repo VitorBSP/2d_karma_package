@@ -37,7 +37,7 @@ commands are given so that each can be re-checked.
 | `experimentos_numericos/` | Monte Carlo scripts, `testes.R`, 4 PNGs | `analysis/legacy/simulations/` |
 | `ndvi/` | NDVI application, KARMA and Gaussian | `analysis/legacy/ndvi/` |
 | `grdi/*.R` | GRDI application, 5 variants | `analysis/legacy/grdi/` |
-| `grdi/data/nasa_corte_india.csv` | 500 x 1001 GRDI crop (unused by any script) | `analysis/data/grdi/` |
+| `grdi/data/nasa_corte_india.csv` | 501 x 1001 GRDI crop (unused by any script) | `analysis/data/grdi/` |
 
 There was no `DESCRIPTION`, `NAMESPACE`, test, documentation or licence. All
 scripts used `source()` with paths relative to the repository root and
@@ -358,7 +358,7 @@ Output of `Rscript analysis/ndvi/run_ndvi.R`:
 `grdi/data/nasa_corte_india_expandido.csv`, which was listed in `.gitignore`
 and never committed, as was the source raster `povmap-grdi-v1.tif`. The crop
 extent used to create the CSV was not recorded. The committed
-`nasa_corte_india.csv` (500 x 1001) is read by no script and is smaller than
+`nasa_corte_india.csv` (501 x 1001) is read by no script and is smaller than
 the window used (rows 1200:1300, columns 2200:2300). `analysis/grdi/run_grdi.R`
 implements the pipeline (same steps, anomaly `[19:23, 41:50] = 0.1`, 3 x 5
 element) and stops with an explanatory message without the input. The

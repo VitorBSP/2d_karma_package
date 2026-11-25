@@ -17,7 +17,7 @@
 # (povmap-grdi-v1.tif, NASA SEDAC/CIESIN). Neither that CSV nor the raster
 # was committed to the repository (both were listed in .gitignore), and the
 # crop extent used to create the CSV was not recorded. The CSV that IS in
-# the repository (analysis/data/grdi/nasa_corte_india.csv, 500 x 1001) is
+# the repository (analysis/data/grdi/nasa_corte_india.csv, 501 x 1001) is
 # not read by any original script and is too small for the window used
 # below. Therefore this pipeline cannot reproduce the article until the
 # expanded CSV is supplied; see docs/data-provenance.md.

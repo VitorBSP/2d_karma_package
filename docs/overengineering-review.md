@@ -52,6 +52,21 @@ que vocês terão de manter compatível.
 
 Resultado: de 22 para 16 exports, e a detecção do artigo vira uma chamada só.
 
+**Lacunas de usabilidade** encontradas ao escrever o relatório de uso
+(`docs/usage-report.md`), em ordem de importância:
+
+* A abertura seguida de fechamento, que é o pós-processamento do artigo, não
+  está disponível em `karma2d_detect_anomalies()` (proposta acima).
+* O recorte das primeiras `2w` linhas e colunas depois da predição sem borda
+  e o recorte da região efetiva para as métricas de calibração são feitos à
+  mão (`m[-(1:2), -(1:2)]`), o que é fácil de errar. Um argumento
+  `crop = TRUE` em `predict()` resolveria.
+* `predict()` e `karma2d_residuals()` param com qualquer `NA`; em rasters
+  reais (GRDI) é preciso imputar antes. Basta documentar a imputação pela
+  média usada no artigo, sem criar mais uma opção.
+* `padding = "duplicate"` muda também as predições internas quando há parte
+  MA; isso agora está documentado em `?predict.karma2d_fit`.
+
 **Opções a decidir com os autores:**
 
 * `predict(padding = "duplicate")` implementa a borda descrita na Sec. 3.1 do
