@@ -91,9 +91,12 @@ result_tables <- list(
                               keep = function(t) t$p < 3 & t$q < 3),
   # The bias is mean - truth: its numerical error is that of the mean, so
   # its tolerance is taken relative to the parameter, not to the bias.
+  # Skewness and kurtosis of 20 replications amplify last-digit differences
+  # of the estimates across R versions and BLAS (3e-5 relative observed on
+  # CI); intended changes of the code move these summaries by 1e-3 or more.
   monte_carlo = list(file = file.path(mc_dir, "paper", "summary.csv"),
                      keys = c("scenario", "size", "parameter"),
-                     scale_by = c(bias = "truth"))
+                     scale_by = c(bias = "truth"), rel_tol = 1e-4)
 )
 
 # Snapshot file for a table; Monte Carlo snapshots are per configuration.

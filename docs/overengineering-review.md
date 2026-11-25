@@ -101,9 +101,9 @@ Ganho estimado: cerca de 150 linhas a menos em `application.R` e
 ## 3. Validação e CI
 
 **`validate_results.R`** foi útil: detectou corretamente que a mudança do
-otimizador alterava os resultados. Mas o custo foi alto: **as três falhas do
+otimizador alterava os resultados. Mas o custo foi alto: **as quatro falhas do
 CI que ele produziu foram alarmes falsos** de diferença numérica entre versões
-do R (2e-5 numa seleção de modelos, 1,2e-7 num viés). Cada uma exigiu um
+do R (2e-5 numa seleção de modelos, 1,2e-7 num viés, 3e-5 numa assimetria). Cada uma exigiu um
 remendo: tolerância por tabela, filtro de linhas, escala do viés. Os achados
 científicos reais (os defeitos do gaussiano, a matriz mista) vieram de análise
 manual, não dele.
