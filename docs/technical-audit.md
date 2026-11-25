@@ -366,6 +366,13 @@ committed GRDI script also fits KARMA(1,0) (`p = 1; q = 0`), while the article
 reports KARMA(0,1). About 24 % of the values of the committed CSV are exactly
 0.01. This is probably a fill value, but its meaning is undocumented.
 
+*Update (2026-11-25).* The authors sent `nasa_corte_india.csv` as an
+extraction of the expanded file; it is identical to the committed copy. An
+exhaustive search over all 100 x 100 windows found none matching Table 6
+(best: 4 published standard errors away), so the article's window is not in
+it. `run_grdi.R` now accepts `--window` and `--missing_value` and runs on
+this file as a functional test (`docs/data-provenance.md`).
+
 ### 5.4 Monte Carlo results
 
 Full table: `docs/monte-carlo-r1000.md` (1,000 replications per cell with

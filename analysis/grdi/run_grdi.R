@@ -4,6 +4,12 @@
 #   Rscript analysis/grdi/run_grdi.R --input=PATH/nasa_corte_india_expandido.csv
 #       [--output=analysis/output/grdi] [--karma_order=0,1]
 #       [--gaussian_order=0,1] [--select=TRUE] [--procedure=article]
+#       [--window=1200,2200] [--missing_value=0.01]
+#
+# Functional test on the committed extraction (NOT the article's window):
+#   Rscript analysis/grdi/run_grdi.R \
+#     --input=analysis/data/grdi/nasa_corte_india.csv \
+#     --window=246,674 --missing_value=0.01
 #
 # DATA AVAILABILITY. The original scripts read
 # `grdi/data/nasa_corte_india_expandido.csv`, a CSV export of a crop of the
@@ -45,7 +51,8 @@ local({
 opts <- parse_args(list(input = "", output = file.path("analysis", "output",
                                                          "grdi"),
                         karma_order = "0,1", gaussian_order = "0,1",
-                        select = "TRUE", procedure = "article"))
+                        select = "TRUE", procedure = "article",
+                        window = "1200,2200", missing_value = ""))
 if (!nzchar(opts$input) || !file.exists(opts$input)) {
   stop(paste(
     "The GRDI input CSV is required: --input=PATH/nasa_corte_india_expandido.csv.",
@@ -54,20 +61,38 @@ if (!nzchar(opts$input) || !file.exists(opts$input)) {
   ), call. = FALSE)
 }
 
+# --window=ROW,COL is the top-left cell of the 100 x 100 window in the data
+# matrix. The default is the window of the original scripts
+# (raw[1200:1300, 2200:2300][1:100, 1:100]). --missing_value=X treats cells
+# equal to X (before dividing by 100) as missing; the committed extraction
+# analysis/data/grdi/nasa_corte_india.csv codes them as 0.01.
+corner <- as.integer(strsplit(opts$window, ",")[[1]])
+article_window <- identical(corner, c(1200L, 2200L))
 raw <- as.matrix(utils::read.csv(opts$input, check.names = FALSE))
-if (nrow(raw) < 1300 || ncol(raw) < 2300) {
+rows <- corner[1] + 0:99
+cols <- corner[2] + 0:99
+if (max(rows) > nrow(raw) || max(cols) > ncol(raw)) {
   stop(sprintf(paste(
-    "The input has %d x %d cells; the original window (rows 1200:1300,",
-    "columns 2200:2300) needs at least 1300 x 2300."
-  ), nrow(raw), ncol(raw)), call. = FALSE)
+    "The input has %d x %d cells; the window starting at (%d, %d) needs at",
+    "least %d x %d. The committed extraction does not contain the article's",
+    "window; use --window to choose another one (see docs/data-provenance.md)."
+  ), nrow(raw), ncol(raw), corner[1], corner[2], max(rows), max(cols)),
+  call. = FALSE)
 }
-grdi <- raw[1200:1300, 2200:2300][1:100, 1:100] / 100
+grdi <- raw[rows, cols]
+if (nzchar(opts$missing_value)) {
+  grdi[grdi == as.numeric(opts$missing_value)] <- NA
+}
+grdi <- grdi / 100
 n_missing <- sum(is.na(grdi))
 grdi[is.na(grdi)] <- mean(grdi, na.rm = TRUE) # as in the original scripts
 message(sprintf("GRDI window: %d missing values replaced by the mean.",
                 n_missing))
 if (any(grdi <= 0 | grdi >= 1)) {
   stop("GRDI values on the unit scale must lie strictly inside (0, 1).")
+}
+if (!article_window) {
+  message("This is NOT the article's window: no comparison with Tables 6-7.")
 }
 
 run_application(list(
@@ -81,8 +106,9 @@ run_application(list(
   select = as.logical(opts$select),
   procedure = opts$procedure,
   article_choice = "2-D KARMA(0, 1)",
-  published = utils::read.csv(file.path("analysis", "grdi",
-                                        "published-values.csv")),
+  published = if (article_window) {
+    utils::read.csv(file.path("analysis", "grdi", "published-values.csv"))
+  },
   to_display = function(v) 100 * v,
   display_range = c(0, 100),
   out_dir = opts$output

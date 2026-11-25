@@ -39,6 +39,39 @@ the original scripts give identical matrices.
 | File used by the article | `nasa_corte_india_expandido.csv`, **not in the repository** (git-ignored), nor is the source raster `povmap-grdi-v1.tif`. Its crop extent, CRS and resolution were not recorded. |
 | Transformations in the original scripts | rows 1200:1300, columns 2200:2300 of the data matrix, first 100 x 100 block, divided by 100, missing values replaced by the mean; Phase I `[51:100, 51:100]`; synthetic anomaly `[19:23, 41:50] <- 0.1` |
 
+**Search for the article's window (2026-11-25).** The authors confirmed that
+`nasa_corte_india.csv` is an extraction of `nasa_corte_india_expandido.csv`
+(the copy they sent is byte-identical to the committed one). Its 0.01 values
+are scattered over the whole image, including 13,395 isolated pixels
+surrounded by valid values near 70, so they are treated as missing codes; the
+original scripts replaced missing values by the window mean. Every one of the
+362,604 possible 100 x 100 windows was preprocessed exactly as in the
+original scripts and screened by the statistics implied by Table 6 (Phase I
+mean 0.742, standard deviation 0.0865, spatial autocorrelations 0.380, 0.347,
+0.187); the 120 best candidates were fitted with both models. The closest one
+(top-left cell row 246, column 680) is still about 4 published standard
+errors away from the Table 6 estimates, while the article's own window would
+match exactly. **The article's window is not in this extraction.** The search
+is reproducible with `Rscript analysis/grdi/search_article_window.R` (about
+40 s).
+
+The functional test below uses the neighbouring window at (246, 674), the
+best one by the mean/standard deviation screen.
+
+The pipeline can still run on real GRDI data as a functional test:
+
+```
+Rscript analysis/grdi/run_grdi.R --input=analysis/data/grdi/nasa_corte_india.csv \
+  --window=246,674 --missing_value=0.01
+```
+
+On that window the pattern of the NDVI application repeats: the Gaussian
+benchmark "as published" (with the two defects described in
+`docs/validation-authors-code.md`) has calibration MAE 0.065 and detects
+nothing, while the corrected Gaussian benchmark has MAE 0.050 (KARMA 0.048)
+and recall 0.92 (KARMA 1.00). This suggests, but does not prove, that Tables
+6-7 have the same defects.
+
 To make the GRDI application reproducible, the authors should publish the
 CSV used (licence permitting, with attribution) or a script that derives it
 from the official raster, stating the GRDI version, download date and crop

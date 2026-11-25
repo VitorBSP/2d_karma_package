@@ -213,7 +213,12 @@ Effect on the article's claims:
 
 The GRDI scripts were not in the archives. If they use the same
 `fitting()` and `fit.2dgarma()`, Tables 6-7 and Figure 10 have the same two
-defects; this should be checked by the authors.
+defects; this should be checked by the authors. A functional test on a real
+GRDI window (not the article's, which is not in the available extraction;
+see `docs/data-provenance.md`) shows the same pattern: as published, the
+Gaussian benchmark detects nothing (calibration MAE 0.065); corrected, it
+detects the anomaly with recall 0.92 (MAE 0.050), against 1.00 for KARMA
+(MAE 0.048).
 
 ## 6. Summary for the authors
 
